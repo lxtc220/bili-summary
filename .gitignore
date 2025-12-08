@@ -1,0 +1,8 @@
+【高中物理必修3系统课】62.伏安法测电阻率_summary.md
+200.【高中物理选修3-1】【高中电路】滑动变阻器两种接法_summary.md
+201.【高中物理选修3-1】【高中电路】伏安特性曲线_summary.md
+
+# 忽略中间文件和最终输出文件夹
+intermediate_files/
+final_outputs/
+model_cache/

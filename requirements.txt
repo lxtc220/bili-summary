@@ -1,0 +1,8 @@
+-i https://pypi.tuna.tsinghua.edu.cn/simple
+bilibili-api-python
+requests
+pydub
+modelscope
+funasr
+torch
+tqdm
