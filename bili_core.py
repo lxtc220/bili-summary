@@ -18,10 +18,10 @@ from modelscope.hub.snapshot_download import snapshot_download
 from funasr import AutoModel
 from openai import OpenAI
 
-# 配置信息
-MODELSCOPE_API_KEY = "ms-ec918bf2-ef06-4f3f-8320-8bfff97ec51e"
-MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
-MODEL_ID = "deepseek-ai/DeepSeek-V3.2"
+# 配置信息 - 火山引擎
+VOLCANO_API_KEY = "c6793bb3-2de6-477a-b569-d75e9b31a0d4"
+VOLCANO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+MODEL_ID = "deepseek-v3-2-251201"
 VIDEO_URL = "https://www.bilibili.com/video/BV1Ga4y1i77D/?spm_id_from=333.1387.homepage.video_card.click&vd_source=6cec98d87e21778c3c0afc1d666bf38b"
 
 def extract_bvid_and_p(url):
@@ -251,16 +251,16 @@ def transcribe_audio(audio_path, progress_callback=None):
         raise Exception(f"音频转文字失败: {e}")
 
 def summarize_content(title, text, progress_callback=None):
-    """使用魔搭社区(ModelScope)模型总结内容（非流式）"""
+    """使用火山引擎模型总结内容（非流式）"""
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
-    client = OpenAI(base_url=MODELSCOPE_BASE_URL, api_key=MODELSCOPE_API_KEY)
+    client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
     
     try:
         response = client.chat.completions.create(
             model=MODEL_ID,
             messages=[
-                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。"},
+                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。请注意：文字内容是通过视频音频转录来的，所以有可能有问题，如果遇到拼写偏差，请自行修正，并不要在总结内容中体现出来。"},
                 {"role": "user", "content": f"视频标题：{title}\n\n文字稿：{text}"}
             ],
             stream=False,
@@ -270,16 +270,16 @@ def summarize_content(title, text, progress_callback=None):
         raise Exception(f"调用AI模型失败: {e}")
 
 def summarize_content_stream(title, text, progress_callback=None):
-    """使用魔搭社区(ModelScope)模型总结内容（流式输出）"""
+    """使用火山引擎模型总结内容（流式输出）"""
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
-    client = OpenAI(base_url=MODELSCOPE_BASE_URL, api_key=MODELSCOPE_API_KEY)
+    client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
     
     try:
         response = client.chat.completions.create(
             model=MODEL_ID,
             messages=[
-                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。"},
+                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。请注意：文字内容是通过视频音频转录来的，所以有可能有问题，如果遇到拼写偏差，请自行修正，并不要在总结内容中体现出来。"},
                 {"role": "user", "content": f"视频标题：{title}\n\n文字稿：{text}"}
             ],
             stream=True,
