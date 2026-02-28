@@ -6,3 +6,7 @@ modelscope
 funasr
 torch
 tqdm
+openai
+fastapi
+uvicorn
+python-multipart
