@@ -140,61 +140,25 @@ def download_audio(bvid, page=1, progress_callback=None):
     except Exception as e:
         raise Exception(f"下载音频异常: {e}")
 
-def split_audio_by_silence(audio_path, segment_length_ms=30000, min_silence_len=500, silence_thresh=-40):
+def split_audio_fixed(audio_path, segment_length_ms=600000):
     """
-    使用pydub检测静音并分割音频
+    按固定时间长度分割音频（无VAD检测，速度更快）
     
     参数:
         audio_path: 音频文件路径
-        segment_length_ms: 每段目标长度（毫秒），默认30秒
-        min_silence_len: 最小静音长度（毫秒），默认500ms
-        silence_thresh: 静音阈值（dBFS），默认-40dB
+        segment_length_ms: 每段长度（毫秒），默认10分钟
     
     返回:
         segments: 音频段列表 [(start_ms, end_ms, audio_segment), ...]
     """
     from pydub import AudioSegment
-    from pydub.silence import detect_nonsilent
     
     audio = AudioSegment.from_file(audio_path)
-    
-    # 检测非静音段（语音段）
-    nonsilent_ranges = detect_nonsilent(
-        audio,
-        min_silence_len=min_silence_len,
-        silence_thresh=silence_thresh
-    )
-    
-    if not nonsilent_ranges:
-        # 如果没有检测到语音段，按固定长度分割
-        segments = []
-        for i in range(0, len(audio), segment_length_ms):
-            end = min(i + segment_length_ms, len(audio))
-            segments.append((i, end, audio[i:end]))
-        return segments
-    
-    # 合并相邻的语音段，控制在目标长度内
     segments = []
-    current_segment = None
-    current_start = 0
     
-    for start, end in nonsilent_ranges:
-        if current_segment is None:
-            # 开始新段
-            current_start = max(0, start - 200)  # 保留一点上下文
-            current_segment = audio[current_start:end + 200]
-        elif len(current_segment) + (end - start) < segment_length_ms:
-            # 继续添加当前段
-            current_segment += audio[start:end]
-        else:
-            # 保存当前段，开始新段
-            segments.append((current_start, current_start + len(current_segment), current_segment))
-            current_start = max(0, start - 200)
-            current_segment = audio[current_start:end + 200]
-    
-    # 添加最后一段
-    if current_segment:
-        segments.append((current_start, current_start + len(current_segment), current_segment))
+    for i in range(0, len(audio), segment_length_ms):
+        end = min(i + segment_length_ms, len(audio))
+        segments.append((i, end, audio[i:end]))
     
     return segments
 
@@ -227,9 +191,9 @@ def transcribe_audio(audio_path, progress_callback=None):
             disable_update=True,
         )
         
-        # 分割音频
-        if progress_callback: progress_callback("正在分析音频结构并分段...")
-        segments = split_audio_by_silence(audio_path, segment_length_ms=300000)
+        # 分割音频（固定10分钟/段，无VAD检测）
+        if progress_callback: progress_callback("正在分割音频...")
+        segments = split_audio_fixed(audio_path, segment_length_ms=300000)
         
         if progress_callback: progress_callback(f"音频已分割为 {len(segments)} 段，开始逐段转录...")
         

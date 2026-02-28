@@ -9,6 +9,40 @@ from bili_core import (
 )
 import time
 import os
+import sys
+import threading
+import datetime
+
+# 自动关闭功能：如果没有活跃连接，则关闭后台
+def monitor_sessions():
+    """后台监控线程：如果 10 秒内没有任何网页连接，则自动关闭服务器"""
+    from streamlit.runtime import get_instance
+    time.sleep(10) # 启动宽限期
+    
+    inactive_count = 0
+    while True:
+        try:
+            runtime = get_instance()
+            # 获取当前活跃的 Session 列表
+            sessions = runtime._session_mgr.list_active_sessions()
+            
+            if not sessions:
+                inactive_count += 1
+                if inactive_count >= 5: # 连续 5 次检测到无连接（约 10 秒），则关闭
+                    print("检测到所有网页已关闭，正在自动退出后台进程...")
+                    runtime.stop()
+                    os._exit(0)
+            else:
+                inactive_count = 0 # 重置计数器
+        except Exception:
+            pass
+        time.sleep(2)
+
+# 只在第一次运行时启动监控线程
+if 'monitor_started' not in st.session_state:
+    st.session_state['monitor_started'] = True
+    thread = threading.Thread(target=monitor_sessions, daemon=True)
+    thread.start()
 
 st.set_page_config(
     page_title="B站视频总结工具",
@@ -160,7 +194,29 @@ with st.sidebar:
         st.divider()
         info = st.session_state['video_info']
         st.markdown('<div class="video-info-card">', unsafe_allow_html=True)
-        st.image(info['pic'], use_container_width=True)
+        
+        # 下载图片到本地以避免防盗链问题
+        try:
+            import requests
+            pic_url = info['pic']
+            # 确保使用 http 协议（b站返回的可能是 // 开头的协议相对 URL）
+            if pic_url.startswith('//'):
+                pic_url = 'https:' + pic_url
+            
+            # 下载图片
+            headers = {
+                'Referer': 'https://www.bilibili.com',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0'
+            }
+            response = requests.get(pic_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                st.image(response.content, use_container_width=True)
+            else:
+                st.image(pic_url, use_container_width=True)
+        except Exception:
+            # 如果下载失败，仍然尝试直接显示原链接
+            st.image(info['pic'], use_container_width=True)
+        
         st.markdown(f"### {info['title']}")
         st.markdown(f"**UP主:** {info['owner']}")
         st.markdown('</div>', unsafe_allow_html=True)
