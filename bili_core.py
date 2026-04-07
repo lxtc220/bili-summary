@@ -115,21 +115,19 @@ def download_audio(bvid, page=1, progress_callback=None):
         
         if len(info['pages']) > 1:
             audio_path = os.path.join("intermediate_files", f"{bvid}_p{page}.mp3")
-            cmd = ["yt-dlp", "--playlist-items", str(page), "-x", "--audio-format", "mp3", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
-            
+            cmd = ["yt-dlp", "--playlist-items", str(page), "-x", "--audio-format", "mp3", "--no-check-certificate", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
             if 0 < page <= len(info['pages']):
                 title = f"{title} - {info['pages'][page-1]['part']}"
         else:
             audio_path = os.path.join("intermediate_files", f"{bvid}.mp3")
-            cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
+            cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "--no-check-certificate", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
 
         if not os.path.exists(audio_path):
-            # 在 Windows 上隐藏子进程黑框
             startupinfo = None
             if sys.platform == "win32":
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = 0  # SW_HIDE
+                startupinfo.wShowWindow = 0
             
             result = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
             if result.returncode != 0:

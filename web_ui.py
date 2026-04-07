@@ -288,7 +288,6 @@ with st.sidebar:
     
     url = st.text_input(
         "输入 B 站视频链接",
-        value="https://www.bilibili.com/video/BV134FVzGEq6",
         placeholder="https://www.bilibili.com/video/..."
     )
     
@@ -306,8 +305,6 @@ with st.sidebar:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 处理失败: {e}")
-            import traceback
-            st.error(traceback.format_exc())
     
     if 'video_info' in st.session_state:
         st.divider()
@@ -390,7 +387,21 @@ st.markdown('<div class="section-title">📝 视频总结</div>', unsafe_allow_h
 # 使用一个固定的容器来减少布局抖动
 summary_container = st.container()
 
-if st.session_state.get('step') != 3:
+if st.session_state.get('step', 0) in [1, 2, 3, 4] and 'current_summary' not in st.session_state:
+    step_msg = {
+        1: "📥 正在获取视频详细信息...",
+        2: "💾 正在提取视频音频...",
+        3: "🎵 正在进行语音转文字 (此步骤较慢，请耐心等待)...",
+        4: "🤖 正在组织语言并生成总结..."
+    }
+    msg = step_msg.get(st.session_state['step'], "⏳ 正在努力处理中...")
+    summary_container.markdown(f'''
+        <div class="summary-box" style="text-align: center; padding: 3rem 1rem;">
+            <div style="font-size: 2.5rem; margin-bottom: 1rem;">⏳</div>
+            <div style="font-size: 1.2rem; color: #666;">{msg}</div>
+        </div>
+    ''', unsafe_allow_html=True)
+elif st.session_state.get('step') != 4:
     if 'final_summary' in st.session_state:
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["final_summary"]}\n\n</div>', unsafe_allow_html=True)
     elif 'current_summary' in st.session_state:
@@ -476,6 +487,9 @@ elif st.session_state.get('step') == 4:
             summary_placeholder.markdown(f'<div class="summary-box">\n\n{full_summary} ▌\n\n</div>', unsafe_allow_html=True)
         
         summarize_time = time.time() - step_start
+        
+        # 提取 ID 用于保存
+        bvid = st.session_state.get('bvid')
         
         txt_path, md_path = save_results(bvid, title, text, full_summary, p)
         
