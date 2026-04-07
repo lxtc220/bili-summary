@@ -1,4 +1,14 @@
 import streamlit as st
+
+# 1. 立即设置页面配置，减少白屏等待感
+st.set_page_config(
+    page_title="B站视频总结工具",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# 2. 导入核心功能 (bili_core 内部已做延迟加载优化)
 from bili_core import (
     extract_bvid_and_p,
     get_video_info,
@@ -44,122 +54,231 @@ if 'monitor_started' not in st.session_state:
     thread = threading.Thread(target=monitor_sessions, daemon=True)
     thread.start()
 
-st.set_page_config(
-    page_title="B站视频总结工具",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+    /* 隐藏顶部默认的 streamlit header */
+    header {visibility: hidden;}
+    
+    /* 设定整体背景为动态渐变或高级纯色 */
+    .stApp {
+        background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
     .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1.5rem;
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        max-width: 95%; /* 占满屏幕更多空间 */
     }
     
+    /* 主标题高级感 */
     .main-header {
-        font-size: 2rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-size: 2.2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #fb7299 0%, #00aeec 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        letter-spacing: -0.5px;
+        padding-top: 1rem;
     }
     
-    .step-card {
-        padding: 1rem;
+    /* 侧边栏整体样式 */
+    [data-testid="stSidebar"] {
+        background-color: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    /* 输入框样式 */
+    .stTextInput > div > div > input {
         border-radius: 12px;
-        margin-bottom: 0.75rem;
+        border: 1px solid #e2e8f0;
+        padding: 0.75rem 1rem;
         transition: all 0.3s ease;
+        background: rgba(255, 255, 255, 0.9);
+        font-size: 1rem;
+    }
+    .stTextInput > div > div > input:focus {
+        border-color: #fb7299;
+        box-shadow: 0 0 0 3px rgba(251, 114, 153, 0.2);
+    }
+
+    /* 按钮样式 */
+    .stButton > button {
+        border-radius: 12px;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #fb7299 0%, #00aeec 100%);
+        color: white;
+        border: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        width: 100%;
+        box-shadow: 0 4px 15px rgba(251, 114, 153, 0.3);
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(251, 114, 153, 0.4);
+        color: white;
+    }
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+    
+    /* 内容卡片玻璃拟态效果 */
+    .summary-box, .progress-section, .video-info-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        padding: 1.5rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+        margin-bottom: 1.5rem;
+    }
+    
+    .summary-box:hover, .progress-section:hover, .video-info-card:hover {
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+    }
+    
+    /* 步骤卡片 */
+    .step-card {
+        padding: 1rem 1.25rem;
+        border-radius: 16px;
+        margin-bottom: 0.8rem;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        font-size: 1.05rem;
     }
     
     .step-pending {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        border: 2px solid #e0e0e0;
-        opacity: 0.7;
+        background: rgba(243, 244, 246, 0.7);
+        border: 1px solid rgba(229, 231, 235, 0.8);
+        color: #6b7280;
     }
     
     .step-running {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: 2px solid #667eea;
+        background: linear-gradient(135deg, #00aeec 0%, #0077ff 100%);
+        border: none;
         color: white;
-        animation: pulse 2s infinite;
+        box-shadow: 0 8px 20px rgba(0, 174, 236, 0.3);
+        transform: scale(1.02);
     }
     
     .step-completed {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-        border: 2px solid #11998e;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border: none;
         color: white;
-    }
-    
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.8; }
-    }
-    
-    .summary-box {
-        background: white;
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    }
-    
-    .progress-section {
-        background: white;
-        border-radius: 16px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2);
     }
     
     .timing-item {
         display: flex;
         justify-content: space-between;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid #f0f0f0;
+        padding: 0.75rem 0;
+        border-bottom: 1px dashed rgba(0,0,0,0.08);
+        font-size: 0.95rem;
+        color: #4b5563;
     }
     
     .timing-item:last-child {
         border-bottom: none;
-        font-weight: 600;
+        font-weight: 700;
+        color: #111827;
+        font-size: 1.05rem;
+        margin-top: 0.5rem;
     }
     
     .status-badge {
-        display: inline-block;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.875rem;
-        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        padding: 0.4rem 1.2rem;
+        border-radius: 999px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
     }
     
     .badge-success {
-        background: #d1fae5;
-        color: #065f46;
+        background: rgba(16, 185, 129, 0.1);
+        color: #059669;
+        border: 1px solid rgba(16, 185, 129, 0.2);
     }
     
     .badge-warning {
-        background: #fef3c7;
-        color: #92400e;
+        background: rgba(245, 158, 11, 0.1);
+        color: #d97706;
+        border: 1px solid rgba(245, 158, 11, 0.2);
     }
     
     .badge-idle {
-        background: #e5e7eb;
-        color: #374151;
-    }
-    
-    .video-info-card {
-        background: white;
-        border-radius: 12px;
-        padding: 1rem;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        margin-top: 1rem;
+        background: rgba(107, 114, 128, 0.1);
+        color: #4b5563;
+        border: 1px solid rgba(107, 114, 128, 0.2);
     }
     
     .section-title {
-        font-size: 1.25rem;
-        font-weight: 600;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* markdown 内容优化 */
+    .summary-box h1, .summary-box h2, .summary-box h3 {
         color: #1f2937;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        font-weight: 700;
+    }
+    .summary-box p {
+        line-height: 1.7;
+        color: #374151;
+        font-size: 1.05rem;
         margin-bottom: 1rem;
+    }
+    .summary-box ul {
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .summary-box li {
+        margin-bottom: 0.4rem;
+        color: #374151;
+        line-height: 1.6;
+    }
+    
+    /* 视频信息卡片强化 */
+    .video-info-card h3 {
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+        color: #111827;
+    }
+    .video-info-card p {
+        color: #6b7280;
+        font-size: 0.95rem;
+    }
+    
+    /* 封面图圆角 */
+    [data-testid="stImage"] img {
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+    
+    hr {
+        border-color: rgba(0,0,0,0.06);
+        margin: 1.5rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -183,7 +302,7 @@ with st.sidebar:
                 st.session_state['url'] = url
                 st.session_state['bvid'] = bvid
                 st.session_state['p'] = p
-                st.session_state['step'] = 0
+                st.session_state['step'] = 1 # 从第1步开始
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 处理失败: {e}")
@@ -193,72 +312,56 @@ with st.sidebar:
     if 'video_info' in st.session_state:
         st.divider()
         info = st.session_state['video_info']
-        st.markdown('<div class="video-info-card">', unsafe_allow_html=True)
-        
-        # 下载图片到本地以避免防盗链问题
+        # 下载图片到本地以避免防盗链问题并转换为base64嵌入HTML
+        img_src = info['pic']
         try:
             import requests
+            import base64
             pic_url = info['pic']
-            # 确保使用 http 协议（b站返回的可能是 // 开头的协议相对 URL）
             if pic_url.startswith('//'):
                 pic_url = 'https:' + pic_url
             
-            # 下载图片
             headers = {
                 'Referer': 'https://www.bilibili.com',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0'
             }
             response = requests.get(pic_url, headers=headers, timeout=10)
             if response.status_code == 200:
-                st.image(response.content, use_container_width=True)
+                img_b64 = base64.b64encode(response.content).decode("utf-8")
+                mime = "image/png" if pic_url.lower().endswith(".png") else "image/jpeg"
+                img_src = f"data:{mime};base64,{img_b64}"
             else:
-                st.image(pic_url, use_container_width=True)
+                img_src = pic_url
         except Exception:
-            # 如果下载失败，仍然尝试直接显示原链接
-            st.image(info['pic'], use_container_width=True)
-        
-        st.markdown(f"### {info['title']}")
-        st.markdown(f"**UP主:** {info['owner']}")
-        st.markdown('</div>', unsafe_allow_html=True)
+            img_src = info['pic']
+            
+        html_content = f'''
+        <div class="video-info-card">
+            <img src="{img_src}" style="width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); margin-bottom: 10px;" />
+            <h3>{info['title']}</h3>
+            <p style="margin-bottom: 0;"><strong>UP主:</strong> {info['owner']}</p>
+        </div>
+        '''
+        st.markdown(html_content, unsafe_allow_html=True)
 
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.markdown('<div class="section-title">📝 视频总结</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title" style="margin-top: 1.5rem;">⚡ 处理进度</div>', unsafe_allow_html=True)
     
-    summary_container = st.container()
-    with summary_container:
-        if 'final_summary' in st.session_state:
-            st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-            st.markdown(st.session_state['final_summary'])
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif 'current_summary' in st.session_state:
-            st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-            st.markdown(st.session_state['current_summary'])
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:
-            st.info("👆 点击左侧栏的「开始处理」按钮开始处理视频")
-
-with col2:
-    st.markdown('<div class="section-title">⚡ 处理进度</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="progress-section">', unsafe_allow_html=True)
+    html_content = '<div class="progress-section">\n'
     
     if 'timing' in st.session_state:
         timing = st.session_state['timing']
-        st.markdown('<span class="status-badge badge-success">✅ 处理完成！</span>', unsafe_allow_html=True)
-        st.markdown("---")
-        st.markdown("### ⏱️ 耗时统计")
+        html_content += '<span class="status-badge badge-success">✅ 处理完成！</span><hr/>\n'
+        html_content += '<h3>⏱️ 耗时统计</h3>\n'
         for k, v in timing.items():
-            st.markdown(f'<div class="timing-item"><span>{k}</span><span>{v:.1f}秒</span></div>', unsafe_allow_html=True)
+            html_content += f'<div class="timing-item"><span>{k}</span><span>{v:.1f}秒</span></div>\n'
     else:
         current_step = st.session_state.get('step', 0)
         if current_step > 0:
-            st.markdown('<span class="status-badge badge-warning">⏳ 处理中...</span>', unsafe_allow_html=True)
+            html_content += '<span class="status-badge badge-warning">⏳ 处理中...</span>\n'
         else:
-            st.markdown('<span class="status-badge badge-idle">⏸️ 等待开始</span>', unsafe_allow_html=True)
+            html_content += '<span class="status-badge badge-idle">⏸️ 等待开始</span>\n'
     
-    st.markdown("---")
+    html_content += '<hr/>\n'
     
     steps_info = [
         ("📥", "获取视频信息"),
@@ -272,15 +375,30 @@ with col2:
         current_step = st.session_state.get('step', 0)
         
         if current_step > step_num:
-            st.markdown(f'<div class="step-card step-completed">{icon} {name} ✅</div>', unsafe_allow_html=True)
+            html_content += f'<div class="step-card step-completed">{icon} {name} ✅</div>\n'
         elif current_step == step_num:
-            st.markdown(f'<div class="step-card step-running">{icon} {name} ⏳</div>', unsafe_allow_html=True)
+            html_content += f'<div class="step-card step-running">{icon} {name} ⏳</div>\n'
         else:
-            st.markdown(f'<div class="step-card step-pending">{icon} {name}</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            html_content += f'<div class="step-card step-pending">{icon} {name}</div>\n'
+            
+    html_content += '</div>'
+    st.markdown(html_content, unsafe_allow_html=True)
 
-if st.session_state.get('step') == 0:
+# 主内容的总结显示
+st.markdown('<div class="section-title">📝 视频总结</div>', unsafe_allow_html=True)
+
+# 使用一个固定的容器来减少布局抖动
+summary_container = st.container()
+
+if st.session_state.get('step') != 3:
+    if 'final_summary' in st.session_state:
+        summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["final_summary"]}\n\n</div>', unsafe_allow_html=True)
+    elif 'current_summary' in st.session_state:
+        summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["current_summary"]}\n\n</div>', unsafe_allow_html=True)
+    else:
+        summary_container.info("💡 输入视频链接并点击「开始处理」以生成总结")
+
+if st.session_state.get('step') == 1:
     try:
         bvid = st.session_state.get('bvid')
         p = st.session_state.get('p', 1)
@@ -293,13 +411,13 @@ if st.session_state.get('step') == 0:
         
         st.session_state['video_info'] = info
         st.session_state['title'] = title
-        st.session_state['step'] = 1
+        st.session_state['step'] = 2 # 进入第2步
         st.rerun()
     except Exception as e:
         st.error(f"❌ 获取视频信息失败: {e}")
         st.session_state['step'] = 0
 
-elif st.session_state.get('step') == 1:
+elif st.session_state.get('step') == 2:
     try:
         bvid = st.session_state.get('bvid')
         p = st.session_state.get('p', 1)
@@ -312,13 +430,13 @@ elif st.session_state.get('step') == 1:
         st.session_state['audio_path'] = audio_path
         st.session_state['title'] = title
         st.session_state['download_time'] = download_time
-        st.session_state['step'] = 2
+        st.session_state['step'] = 3
         st.rerun()
     except Exception as e:
         st.error(f"❌ 下载音频失败: {e}")
-        st.session_state['step'] = 1
+        st.session_state['step'] = 0
 
-elif st.session_state.get('step') == 2:
+elif st.session_state.get('step') == 3:
     try:
         audio_path = st.session_state['audio_path']
         
@@ -331,31 +449,31 @@ elif st.session_state.get('step') == 2:
         
         st.session_state['text'] = text
         st.session_state['transcribe_time'] = transcribe_time
-        st.session_state['step'] = 3
+        st.session_state['step'] = 4
         st.rerun()
     except Exception as e:
         st.error(f"❌ 音频转录失败: {e}")
-        st.session_state['step'] = 2
+        st.session_state['step'] = 0
 
-elif st.session_state.get('step') == 3:
+elif st.session_state.get('step') == 4:
     try:
         title = st.session_state['title']
         text = st.session_state['text']
         bvid = st.session_state.get('bvid')
         p = st.session_state.get('p', 1)
         
-        summary_placeholder = st.empty()
-        
         step_start = time.time()
         full_summary = ""
         
+        # 预先创建一个空位，专门用于流式输出
+        with summary_container:
+            summary_placeholder = st.empty()
+            
         for chunk in summarize_content_stream(title, text, None):
             full_summary += chunk
             st.session_state['current_summary'] = full_summary
-            with summary_placeholder.container():
-                st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-                st.markdown(full_summary)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # 流式输出时，直接更新 markdown 减少 HTML 嵌套层次带来的渲染压力
+            summary_placeholder.markdown(f'<div class="summary-box">\n\n{full_summary} ▌\n\n</div>', unsafe_allow_html=True)
         
         summarize_time = time.time() - step_start
         
@@ -370,11 +488,11 @@ elif st.session_state.get('step') == 3:
         
         st.session_state['final_summary'] = full_summary
         st.session_state['timing'] = timing
-        st.session_state['step'] = 4
+        st.session_state['step'] = 5
         
         st.rerun()
     except Exception as e:
         st.error(f"❌ AI 总结失败: {e}")
         import traceback
         st.error(traceback.format_exc())
-        st.session_state['step'] = 3
+        st.session_state['step'] = 0

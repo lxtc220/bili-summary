@@ -6,6 +6,7 @@ ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg")
 if ffmpeg_path not in os.environ["PATH"]:
     os.environ["PATH"] = f"{ffmpeg_path};{os.environ['PATH']}"
 
+# 基础库
 import requests
 import json
 import threading
@@ -14,9 +15,6 @@ import subprocess
 import re
 from pathlib import Path
 from bilibili_api import video, sync
-from modelscope.hub.snapshot_download import snapshot_download
-from funasr import AutoModel
-from openai import OpenAI
 
 # 配置信息 - 火山引擎
 VOLCANO_API_KEY = "c6793bb3-2de6-477a-b569-d75e9b31a0d4"
@@ -73,6 +71,7 @@ def download_paraformer_model(progress_callback=None):
         return target_dir
         
     try:
+        from modelscope.hub.snapshot_download import snapshot_download
         model_dir = snapshot_download(
             model_id,
             cache_dir=model_cache_dir,
@@ -171,6 +170,7 @@ def transcribe_audio(audio_path, progress_callback=None):
         import os
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
         
+        from funasr import AutoModel
         import torch
         import gc
         
@@ -254,6 +254,7 @@ def summarize_content(title, text, progress_callback=None):
     """使用火山引擎模型总结内容（非流式）"""
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
+    from openai import OpenAI
     client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
     
     try:
@@ -273,6 +274,7 @@ def summarize_content_stream(title, text, progress_callback=None):
     """使用火山引擎模型总结内容（流式输出）"""
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
+    from openai import OpenAI
     client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
     
     try:
