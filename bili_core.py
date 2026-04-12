@@ -235,7 +235,8 @@ def transcribe_audio(audio_path, progress_callback=None):
                     cache={}, 
                     language="auto", 
                     use_itn=True,
-                    batch_size_s=60
+                    batch_size_s=60,
+                    sample_rate=16000
                 )
                 if isinstance(res, list) and len(res) > 0:
                     # 使用专门的清洗函数
