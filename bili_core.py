@@ -16,6 +16,57 @@ import re
 from pathlib import Path
 from bilibili_api import video, sync
 
+# --- ASR 模型单例与异步加载 ---
+_asr_model_instance = None
+_model_lock = threading.Lock()
+
+def preload_asr_model(progress_callback=None):
+    """异步预加载 ASR 模型到全局变量"""
+    global _asr_model_instance
+    
+    if _asr_model_instance is not None:
+        return _asr_model_instance
+        
+    with _model_lock:
+        # 双重检查锁
+        if _asr_model_instance is not None:
+            return _asr_model_instance
+            
+        if progress_callback: progress_callback("正在初始化 ASR 引擎...")
+        
+        try:
+            import torch
+            import gc
+            from funasr import AutoModel
+            
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+            torch.cuda.empty_cache()
+            gc.collect()
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+            local_model_path = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic", "SenseVoiceSmall")
+            if not os.path.exists(local_model_path):
+                download_asr_model(progress_callback)
+            
+            # 加载模型
+            _asr_model_instance = AutoModel(
+                model=local_model_path,
+                trust_remote_code=True,
+                device=device,
+                disable_update=True,
+                ncps=True,
+                vad_model="fsmn-vad",
+                punc_model="ct-punc",
+            )
+            
+            if progress_callback: progress_callback("ASR 引擎已就绪")
+            return _asr_model_instance
+            
+        except Exception as e:
+            if progress_callback: progress_callback(f"ASR 引擎加载失败: {e}")
+            raise e
+
 # 配置信息 - 火山引擎
 VOLCANO_API_KEY = "c6793bb3-2de6-477a-b569-d75e9b31a0d4"
 VOLCANO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
@@ -180,89 +231,48 @@ def clean_transcription_text(text):
     return text.strip()
 
 def transcribe_audio(audio_path, progress_callback=None):
-    """使用 SenseVoiceSmall 模型将音频分段转换为文字"""
-    if progress_callback: progress_callback("正在加载 SenseVoiceSmall 模型并开始转录...")
+    """使用 SenseVoiceSmall 模型转录音频，支持异步预加载的模型实例"""
+    global _asr_model_instance
     
     try:
-        import os
-        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+        # 1. 检查模型是否已由后台线程加载完成，若未完成则阻塞等待
+        if _asr_model_instance is None:
+            if progress_callback: progress_callback("⏳ ASR 引擎正在初始化/预热中，请稍候...")
+            model = preload_asr_model(progress_callback)
+        else:
+            model = _asr_model_instance
+
+        # 2. 执行转录逻辑
+        if progress_callback: progress_callback("正在启动 ASR 引擎处理全量音频 (SenseVoice + VAD)...")
         
-        from funasr import AutoModel
+        # 直接对完整音频路径进行转录
+        try:
+            import torch
+            # 使用内置 VAD 自动处理静音切分和长音频
+            res = model.generate(
+                input=audio_path, 
+                cache={}, 
+                language="auto", 
+                use_itn=True,
+                batch_size_s=120, # 增大批处理时长
+                sample_rate=16000
+            )
+            
+            if isinstance(res, list) and len(res) > 0:
+                # 使用专门的清洗函数处理全文
+                full_text = clean_transcription_text(res[0]["text"])
+            else:
+                full_text = ""
+                
+        except Exception as e:
+            raise Exception(f"音频转录执行失败: {str(e)}") from e
+        
+        # 优化点：不要在此处删除模型单例，因为我们要复用它
         import torch
-        import gc
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
-        torch.cuda.empty_cache()
-        gc.collect()
-        
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        local_model_path = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic", "SenseVoiceSmall")
-        if not os.path.exists(local_model_path):
-            download_asr_model(progress_callback)
-        
-        # 加载 SenseVoice 模型
-        model = AutoModel(
-            model=local_model_path,
-            trust_remote_code=True,
-            device=device,
-            disable_update=True,
-            # SenseVoice 专用参数
-            vad_model="fsmn-vad",
-            punc_model="ct-punc",
-        )
-        
-        # SenseVoice 本身对长音频支持较好，但分段转录能更细致地观察进度
-        if progress_callback: progress_callback("正在分割音频以实现进度观察...")
-        segments = split_audio_fixed(audio_path, segment_length_ms=300000)
-        
-        if progress_callback: progress_callback(f"音频已分割为 {len(segments)} 段，开始转录...")
-        
-        # 逐段转录
-        all_texts = []
-        for i, (start_ms, end_ms, segment_audio) in enumerate(segments):
-            if progress_callback:
-                progress_callback(f"转录第 {i+1}/{len(segments)} 段 ({start_ms//1000}s-{end_ms//1000}s)...")
-            
-            # 保存临时文件
-            temp_path = os.path.join("intermediate_files", f"temp_segment_{i}.wav")
-            segment_audio.export(temp_path, format="wav")
-            
-            # 转录
-            try:
-                # SenseVoice 默认输出包含情绪标签，例如 <|HAPPY|>, <|ZH|> 等
-                res = model.generate(
-                    input=temp_path, 
-                    cache={}, 
-                    language="auto", 
-                    use_itn=True,
-                    batch_size_s=60,
-                    sample_rate=16000
-                )
-                if isinstance(res, list) and len(res) > 0:
-                    # 使用专门的清洗函数
-                    text = clean_transcription_text(res[0]["text"])
-                    all_texts.append(text)
-            except Exception as seg_e:
-                if progress_callback:
-                    progress_callback(f"第 {i+1} 段转录失败: {seg_e}")
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-            
-            if device == "cuda":
-                torch.cuda.empty_cache()
-        
-        # 释放模型
-        del model
-        torch.cuda.empty_cache()
-        gc.collect()
-        
-        # 合并并规范化标点
-        full_text = "".join(all_texts)
-        # 最后再对整体进行一次标点修复
-        full_text = re.sub(r'[，,]+', '，', full_text)
-        full_text = re.sub(r'[。.]+', '。', full_text)
-        
+        # 规范化末尾标点
         if full_text and full_text[-1] not in "。！？；：":
             full_text += "。"
         
@@ -271,9 +281,10 @@ def transcribe_audio(audio_path, progress_callback=None):
     except Exception as e:
         import torch
         import gc
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         gc.collect()
-        raise Exception(f"音频转文字失败: {e}")
+        raise Exception(f"音频转文字失败: {str(e)}") from e
 
 def summarize_content(title, text, progress_callback=None):
     """使用火山引擎模型总结内容（非流式）"""

@@ -15,13 +15,19 @@ from bili_core import (
     download_audio,
     transcribe_audio,
     summarize_content_stream,
-    save_results
+    save_results,
+    preload_asr_model
 )
 import time
 import os
 import sys
 import threading
 import datetime
+
+# 3. 在应用启动时，立即开启后台线程异步加载模型
+if 'model_preloading_triggered' not in st.session_state:
+    st.session_state['model_preloading_triggered'] = True
+    threading.Thread(target=preload_asr_model, daemon=True).start()
 
 # 自动关闭功能：如果没有活跃连接，则关闭后台
 def monitor_sessions():
