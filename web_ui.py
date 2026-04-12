@@ -387,12 +387,11 @@ st.markdown('<div class="section-title">📝 视频总结</div>', unsafe_allow_h
 # 使用一个固定的容器来减少布局抖动
 summary_container = st.container()
 
-if st.session_state.get('step', 0) in [1, 2, 3, 4] and 'current_summary' not in st.session_state:
+if st.session_state.get('step', 0) in [1, 2, 3] and 'current_summary' not in st.session_state:
     step_msg = {
         1: "📥 正在获取视频详细信息...",
         2: "💾 正在提取视频音频...",
-        3: "🎵 正在进行语音转文字 (此步骤较慢，请耐心等待)...",
-        4: "🤖 正在组织语言并生成总结..."
+        3: "🎵 正在进行语音转文字 (此步骤较慢，请耐心等待)..."
     }
     msg = step_msg.get(st.session_state['step'], "⏳ 正在努力处理中...")
     summary_container.markdown(f'''
@@ -479,6 +478,8 @@ elif st.session_state.get('step') == 4:
         # 预先创建一个空位，专门用于流式输出
         with summary_container:
             summary_placeholder = st.empty()
+            # 在等待第一块内容时显示一个简单的加载状态，直接在 placeholder 中占位
+            summary_placeholder.markdown('<div class="summary-box">🤖 正在组织语言并生成总结...</div>', unsafe_allow_html=True)
             
         for chunk in summarize_content_stream(title, text, None):
             full_summary += chunk

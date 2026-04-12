@@ -57,15 +57,16 @@ def extract_bvid_and_p(url):
                 p = 1
     return bvid, p
 
-def download_paraformer_model(progress_callback=None):
-    """下载Paraformer模型"""
-    if progress_callback: progress_callback("正在下载Paraformer模型...")
+def download_asr_model(progress_callback=None):
+    """下载 SenseVoiceSmall ASR 模型"""
+    if progress_callback: progress_callback("正在下载 SenseVoiceSmall 模型 (阿里巴巴达摩院最新多语言模型)...")
     
     model_cache_dir = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic")
     os.makedirs(model_cache_dir, exist_ok=True)
     
-    model_id = "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
-    target_dir = os.path.join(model_cache_dir, "paraformer-zh")
+    # 使用 SenseVoiceSmall 模型
+    model_id = "iic/SenseVoiceSmall"
+    target_dir = os.path.join(model_cache_dir, "SenseVoiceSmall")
     
     if os.path.exists(target_dir):
         return target_dir
@@ -82,7 +83,7 @@ def download_paraformer_model(progress_callback=None):
         shutil.copytree(model_dir, target_dir)
         return target_dir
     except Exception as e:
-        raise Exception(f"下载模型失败: {e}")
+        raise Exception(f"下载 ASR 模型失败: {e}")
 
 def get_video_info(bvid):
     """获取视频详细信息"""
@@ -160,9 +161,27 @@ def split_audio_fixed(audio_path, segment_length_ms=600000):
     return segments
 
 
+def clean_transcription_text(text):
+    """清理转录文本，保留 SenseVoice 标签但修复重复标点"""
+    if not text:
+        return ""
+    # 1. 不再移除 SenseVoice 特殊标签 <|...|>，保留它们
+    
+    # 2. 移除多余空格（中文转录通常不需要空格）
+    text = text.replace(" ", "")
+    # 3. 修复重复的标点符号
+    text = re.sub(r'[，,]+', '，', text)
+    text = re.sub(r'[。.]+', '。', text)
+    text = re.sub(r'[？?]+', '？', text)
+    text = re.sub(r'[！!]+', '！', text)
+    # 4. 修复标点组合错误
+    text = re.sub(r'，。', '。', text)
+    text = re.sub(r'。，', '。', text)
+    return text.strip()
+
 def transcribe_audio(audio_path, progress_callback=None):
-    """使用Paraformer模型将音频分段转换为文字"""
-    if progress_callback: progress_callback("正在加载Paraformer模型并分段转写...")
+    """使用 SenseVoiceSmall 模型将音频分段转换为文字"""
+    if progress_callback: progress_callback("正在加载 SenseVoiceSmall 模型并开始转录...")
     
     try:
         import os
@@ -177,23 +196,26 @@ def transcribe_audio(audio_path, progress_callback=None):
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        local_model_path = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic", "paraformer-zh")
+        local_model_path = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic", "SenseVoiceSmall")
         if not os.path.exists(local_model_path):
-            download_paraformer_model(progress_callback)
+            download_asr_model(progress_callback)
         
-        # 加载模型
+        # 加载 SenseVoice 模型
         model = AutoModel(
             model=local_model_path,
             trust_remote_code=True,
             device=device,
             disable_update=True,
+            # SenseVoice 专用参数
+            vad_model="fsmn-vad",
+            punc_model="ct-punc",
         )
         
-        # 分割音频（固定10分钟/段，无VAD检测）
-        if progress_callback: progress_callback("正在分割音频...")
+        # SenseVoice 本身对长音频支持较好，但分段转录能更细致地观察进度
+        if progress_callback: progress_callback("正在分割音频以实现进度观察...")
         segments = split_audio_fixed(audio_path, segment_length_ms=300000)
         
-        if progress_callback: progress_callback(f"音频已分割为 {len(segments)} 段，开始逐段转录...")
+        if progress_callback: progress_callback(f"音频已分割为 {len(segments)} 段，开始转录...")
         
         # 逐段转录
         all_texts = []
@@ -207,19 +229,25 @@ def transcribe_audio(audio_path, progress_callback=None):
             
             # 转录
             try:
-                res = model.generate(input=temp_path, batch_size_s=30)
+                # SenseVoice 默认输出包含情绪标签，例如 <|HAPPY|>, <|ZH|> 等
+                res = model.generate(
+                    input=temp_path, 
+                    cache={}, 
+                    language="auto", 
+                    use_itn=True,
+                    batch_size_s=60
+                )
                 if isinstance(res, list) and len(res) > 0:
-                    text = res[0]["text"].replace(" ", "")
+                    # 使用专门的清洗函数
+                    text = clean_transcription_text(res[0]["text"])
                     all_texts.append(text)
             except Exception as seg_e:
                 if progress_callback:
                     progress_callback(f"第 {i+1} 段转录失败: {seg_e}")
             finally:
-                # 清理临时文件
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
             
-            # 清理GPU缓存
             if device == "cuda":
                 torch.cuda.empty_cache()
         
@@ -228,13 +256,11 @@ def transcribe_audio(audio_path, progress_callback=None):
         torch.cuda.empty_cache()
         gc.collect()
         
-        # 合并所有文本
-        full_text = ""
-        for text in all_texts:
-            if text:
-                if full_text and not full_text[-1] in "。！？；：":
-                    full_text += "。"
-                full_text += text
+        # 合并并规范化标点
+        full_text = "".join(all_texts)
+        # 最后再对整体进行一次标点修复
+        full_text = re.sub(r'[，,]+', '，', full_text)
+        full_text = re.sub(r'[。.]+', '。', full_text)
         
         if full_text and full_text[-1] not in "。！？；：":
             full_text += "。"
