@@ -297,6 +297,11 @@ with st.sidebar:
         placeholder="https://www.bilibili.com/video/..."
     )
     
+    # 验证 API 密钥
+    from bili_core import LLM_API_KEY
+    if not LLM_API_KEY:
+        st.warning("⚠️ 未配置 LLM_API_KEY，AI 总结功能将不可用。请在 .env 文件中配置密钥。")
+    
     if st.button("开始处理", type="primary", use_container_width=True):
         try:
             bvid, p = extract_bvid_and_p(url)

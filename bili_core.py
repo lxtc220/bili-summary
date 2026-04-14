@@ -76,6 +76,10 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com") # 默认 DeepSeek 官方
 MODEL_ID = os.environ.get("MODEL_ID", "deepseek-chat")
 
+# 验证 API 密钥是否存在
+if not LLM_API_KEY:
+    print("警告: 未检测到 LLM_API_KEY 环境变量，AI 总结功能将不可用。", file=sys.stderr)
+
 def extract_bvid_and_p(url):
     """从URL中提取BV号和分集号"""
     bvid = None
@@ -291,6 +295,9 @@ def transcribe_audio(audio_path, progress_callback=None):
 
 def summarize_content(title, text, progress_callback=None):
     """使用 AI 模型总结内容（支持 OpenAI 接口，非流式）"""
+    if not LLM_API_KEY:
+        raise ValueError("请先在 .env 或环境变量中配置 LLM_API_KEY。")
+        
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
     from openai import OpenAI
@@ -311,6 +318,9 @@ def summarize_content(title, text, progress_callback=None):
 
 def summarize_content_stream(title, text, progress_callback=None):
     """使用 AI 模型总结内容（支持 OpenAI 接口，流式）"""
+    if not LLM_API_KEY:
+        raise ValueError("请先在 .env 或环境变量中配置 LLM_API_KEY。")
+        
     if progress_callback: progress_callback("正在调用AI模型进行流式总结...")
     
     from openai import OpenAI
