@@ -4,8 +4,8 @@
 
 ## 🚀 功能特性
 
-- **高效转录**：采用阿里巴巴 SenseVoiceSmall ASR 模型，支持多种语言，转录速度极快。
-- **智能总结**：集成 DeepSeek 等大语言模型，提供清晰、专业的视频内容总结（支持所有兼容 OpenAI 接口的服务商）。
+- **高效转录**：采用 SenseVoiceSmall ASR 模型，支持多种语言，转录速度极快。
+- **智能总结**：集成大语言模型，提供清晰、专业的视频内容总结（支持所有兼容 OpenAI 接口的服务商）。需要自行配置api密钥和base url，推荐使用 [魔搭社区 DeepSeek-V3.2 API](https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3.2)。
 - **自动分段**：自动处理长视频，确保转录和总结的完整性。
 - **Web UI**：基于 Streamlit 的现代化网页界面，操作简单。
 - **自动管理**：网页关闭后自动退出后台进程，节省系统资源。
@@ -35,17 +35,15 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-编辑 `.env` 文件，填入 AI 服务商提供的 API Key 和 Base URL。
+编辑 `.env` 文件，填入 AI 服务商提供的 API Key 和 Base URL。推荐使用 [魔搭社区 ModelScope](https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3.2) 的推理服务。
 
 ## 📖 使用方法
 
 直接运行启动脚本或使用 Python 启动：
 ```bash
 # Windows
-start.bat
+后台启动.vbs
 
-# 或者直接使用 Python
-streamlit run web_ui.py
 ```
 
 ## 📂 项目结构
