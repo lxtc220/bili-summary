@@ -9,13 +9,14 @@
 - **自动分段**：自动处理长视频，确保转录和总结的完整性。
 - **Web UI**：基于 Streamlit 的现代化网页界面，操作简单。
 - **自动管理**：网页关闭后自动退出后台进程，节省系统资源。
+- **内容理解**：目前仅能理解音频内容，不支持视频内的图像理解，但对于大部分口播视频已经够用了。
 
 ## 🛠️ 安装与配置
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/your-repo/bili-s.git
-cd bili-s
+git clone https://github.com/lxtc220/bili-summary.git
+cd bili-summary
 ```
 
 ### 2. 安装依赖
