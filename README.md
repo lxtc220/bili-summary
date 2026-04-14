@@ -1,4 +1,4 @@
-# B站视频总结工具 (Bili-S)
+# B站视频总结工具 (Bili-summary)
 
 这是一个基于 SenseVoiceSmall ASR 模型和 DeepSeek的 B 站视频内容总结工具。它可以自动提取视频音频、进行高精度转录，并生成结构化的 Markdown 总结。
 
