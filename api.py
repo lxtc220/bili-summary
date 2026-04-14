@@ -9,10 +9,14 @@ import threading
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
 
 # 配置 ffmpeg 路径
-ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg")
-if ffmpeg_path not in os.environ["PATH"]:
+ffmpeg_path = os.environ.get("FFMPEG_PATH") or os.path.join(os.getcwd(), "ffmpeg")
+if os.path.exists(ffmpeg_path) and ffmpeg_path not in os.environ["PATH"]:
     os.environ["PATH"] = f"{ffmpeg_path};{os.environ['PATH']}"
 
 from fastapi import FastAPI, HTTPException

@@ -1,9 +1,13 @@
 import os
 import sys
+from dotenv import load_dotenv
+
+# 加载 .env 文件中的环境变量
+load_dotenv()
 
 # 配置信息 - 使用本地 ffmpeg
-ffmpeg_path = os.path.join(os.getcwd(), "ffmpeg")
-if ffmpeg_path not in os.environ["PATH"]:
+ffmpeg_path = os.environ.get("FFMPEG_PATH") or os.path.join(os.getcwd(), "ffmpeg")
+if os.path.exists(ffmpeg_path) and ffmpeg_path not in os.environ["PATH"]:
     os.environ["PATH"] = f"{ffmpeg_path};{os.environ['PATH']}"
 
 # 基础库
@@ -67,11 +71,10 @@ def preload_asr_model(progress_callback=None):
             if progress_callback: progress_callback(f"ASR 引擎加载失败: {e}")
             raise e
 
-# 配置信息 - 火山引擎
-VOLCANO_API_KEY = "c6793bb3-2de6-477a-b569-d75e9b31a0d4"
-VOLCANO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
-MODEL_ID = "deepseek-v3-2-251201"
-VIDEO_URL = "https://www.bilibili.com/video/BV1Ga4y1i77D/?spm_id_from=333.1387.homepage.video_card.click&vd_source=6cec98d87e21778c3c0afc1d666bf38b"
+# AI 模型配置 (支持所有兼容 OpenAI 接口的服务商，如 DeepSeek 官方, 火山引擎等)
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com") # 默认 DeepSeek 官方
+MODEL_ID = os.environ.get("MODEL_ID", "deepseek-chat")
 
 def extract_bvid_and_p(url):
     """从URL中提取BV号和分集号"""
@@ -287,11 +290,11 @@ def transcribe_audio(audio_path, progress_callback=None):
         raise Exception(f"音频转文字失败: {str(e)}") from e
 
 def summarize_content(title, text, progress_callback=None):
-    """使用火山引擎模型总结内容（非流式）"""
+    """使用 AI 模型总结内容（支持 OpenAI 接口，非流式）"""
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
     
     from openai import OpenAI
-    client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
+    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
     
     try:
         response = client.chat.completions.create(
@@ -307,11 +310,11 @@ def summarize_content(title, text, progress_callback=None):
         raise Exception(f"调用AI模型失败: {e}")
 
 def summarize_content_stream(title, text, progress_callback=None):
-    """使用火山引擎模型总结内容（流式输出）"""
-    if progress_callback: progress_callback("正在调用AI模型进行总结...")
+    """使用 AI 模型总结内容（支持 OpenAI 接口，流式）"""
+    if progress_callback: progress_callback("正在调用AI模型进行流式总结...")
     
     from openai import OpenAI
-    client = OpenAI(base_url=VOLCANO_BASE_URL, api_key=VOLCANO_API_KEY)
+    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
     
     try:
         response = client.chat.completions.create(
