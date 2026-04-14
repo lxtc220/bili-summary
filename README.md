@@ -5,7 +5,7 @@
 ## 🚀 功能特性
 
 - **高效转录**：采用 SenseVoiceSmall ASR 模型，支持多种语言，转录速度极快。
-- **智能总结**：集成大语言模型，提供清晰、专业的视频内容总结（支持所有兼容 OpenAI 接口的服务商）。需要自行配置api密钥和base url，推荐使用 [魔搭社区 DeepSeek-V3.2 API](https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3.2)。
+- **智能总结**：集成大语言模型，提供清晰、专业的视频内容总结（支持所有兼容 OpenAI 接口的服务商）。需要自行配置api密钥和base url，推荐使用免费的 [魔搭社区 DeepSeek-V3.2 API](https://www.modelscope.cn/models/deepseek-ai/DeepSeek-V3.2)。
 - **自动分段**：自动处理长视频，确保转录和总结的完整性。
 - **Web UI**：基于 Streamlit 的现代化网页界面，操作简单。
 - **自动管理**：网页关闭后自动退出后台进程，节省系统资源。
