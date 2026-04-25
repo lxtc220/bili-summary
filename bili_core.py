@@ -74,46 +74,142 @@ def preload_asr_model(progress_callback=None):
 # AI 模型配置 (支持所有兼容 OpenAI 接口的服务商，如 DeepSeek 官方, 火山引擎等)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com") # 默认 DeepSeek 官方
-MODEL_ID = os.environ.get("MODEL_ID", "deepseek-chat")
+MODEL_ID = os.environ.get("MODEL_ID", "deepseek-ai/DeepSeek-V4-Flash")
+DEFAULT_BILI_USER_AGENT = os.environ.get(
+    "BILIBILI_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+)
+DEFAULT_BILI_REFERER = os.environ.get("BILIBILI_REFERER", "https://www.bilibili.com/")
+DEFAULT_BILI_ORIGIN = os.environ.get("BILIBILI_ORIGIN", "https://www.bilibili.com")
+_BVID_RE = re.compile(r"(BV[0-9A-Za-z]{10})", re.IGNORECASE)
+_PAGE_RE = re.compile(r"[?&]p=(\d+)")
 
 # 验证 API 密钥是否存在
 if not LLM_API_KEY:
     print("警告: 未检测到 LLM_API_KEY 环境变量，AI 总结功能将不可用。", file=sys.stderr)
 
+
+class LLMServiceError(Exception):
+    """AI 服务调用失败，message 可直接展示给用户。"""
+
+
+def _extract_error_code(error):
+    """兼容 OpenAI SDK 与各类 OpenAI-compatible 服务商的错误结构。"""
+    for attr in ("code", "type"):
+        value = getattr(error, attr, None)
+        if value:
+            return str(value)
+
+    body = getattr(error, "body", None)
+    if isinstance(body, dict):
+        nested_error = body.get("error")
+        if isinstance(nested_error, dict):
+            return str(nested_error.get("code") or nested_error.get("type") or "")
+        return str(body.get("code") or body.get("type") or "")
+
+    response = getattr(error, "response", None)
+    if response is not None:
+        try:
+            payload = response.json()
+            nested_error = payload.get("error") if isinstance(payload, dict) else None
+            if isinstance(nested_error, dict):
+                return str(nested_error.get("code") or nested_error.get("type") or "")
+        except Exception:
+            pass
+
+    return ""
+
+
+def _format_llm_error(error):
+    status_code = getattr(error, "status_code", None)
+    raw_message = str(error)
+
+    quota_markers = ("insufficient_quota", "quota", "token-limit", "billing")
+    is_quota_error = status_code == 429 or any(marker in raw_message.lower() for marker in quota_markers)
+    if is_quota_error:
+        return (
+            "AI 总结失败：当前 AI 服务额度不足或触发限额。"
+            f"请检查服务商账号余额/套餐用量，或在 .env 中更换 LLM_API_KEY、LLM_BASE_URL、MODEL_ID 后重试。"
+            f"当前配置：MODEL_ID={MODEL_ID}，LLM_BASE_URL={LLM_BASE_URL}。"
+        )
+
+    auth_markers = ("invalid_api_key", "unauthorized", "401")
+    if status_code == 401 or any(marker in raw_message.lower() for marker in auth_markers):
+        return (
+            "AI 总结失败：API Key 无效或没有访问权限。"
+            "请检查 .env 中的 LLM_API_KEY、LLM_BASE_URL、MODEL_ID 是否匹配同一个服务商。"
+        )
+
+    if status_code == 404:
+        return (
+            "AI 总结失败：模型不存在或当前账号无权调用该模型。"
+            f"请检查 .env 中的 MODEL_ID。当前 MODEL_ID={MODEL_ID}。"
+        )
+
+    suffix = f"（服务商返回：{raw_message}）" if raw_message else ""
+    return f"AI 总结失败：调用 AI 服务时出错{suffix}"
+
+
 def extract_bvid_and_p(url):
     """从URL中提取BV号和分集号"""
-    bvid = None
     p = 1
-    
-    if "BV" in url:
-        bv_start = url.find("BV")
-        # 找到问号或斜杠的位置
-        question_mark = url.find("?")
-        slash = url.find("/", bv_start + 2)
-        end_pos = -1
 
-        if question_mark != -1 and slash != -1:
-            end_pos = min(question_mark, slash)
-        elif question_mark != -1:
-            end_pos = question_mark
-        elif slash != -1:
-            end_pos = slash
+    if not url:
+        return None, p
 
-        if end_pos != -1:
-            bvid = url[bv_start:end_pos]
-        else:
-            bvid = url[bv_start:]
-            
-        if "p=" in url:
-            p_start = url.find("p=") + 2
-            p_end = url.find("&", p_start)
-            if p_end == -1:
-                p_end = len(url)
-            try:
-                p = int(url[p_start:p_end])
-            except ValueError:
-                p = 1
-    return bvid, p
+    page_match = _PAGE_RE.search(url)
+    if page_match:
+        try:
+            p = int(page_match.group(1))
+        except ValueError:
+            p = 1
+
+    bvid_match = _BVID_RE.search(url)
+    if bvid_match:
+        bvid = bvid_match.group(1)
+        return "BV" + bvid[2:], p
+
+    return None, p
+
+def _resolve_bili_video_url(source_url, bvid, page=1):
+    """尽量保留用户输入的原始链接；否则退回到标准 BV 页面链接。"""
+    if source_url and source_url.startswith(("http://", "https://")):
+        return source_url
+
+    video_url = f"https://www.bilibili.com/video/{bvid}"
+    if page > 1:
+        video_url += f"?p={page}"
+    return video_url
+
+def _extend_yt_dlp_command(cmd):
+    """为 yt-dlp 补充更像浏览器的请求头和可选 cookies。"""
+    cmd.extend([
+        "--no-check-certificate",
+        "--retries", "5",
+        "--fragment-retries", "5",
+        "--extractor-retries", "5",
+        "--user-agent", DEFAULT_BILI_USER_AGENT,
+        "--add-header", f"Referer: {DEFAULT_BILI_REFERER}",
+        "--add-header", f"Origin: {DEFAULT_BILI_ORIGIN}",
+        "--add-header", "Accept-Language: zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    ])
+
+    cookie_file = os.environ.get("BILIBILI_COOKIE_FILE", "").strip()
+    if cookie_file:
+        cookie_file = os.path.abspath(cookie_file)
+        if os.path.exists(cookie_file):
+            cmd.extend(["--cookies", cookie_file])
+
+    cookies_from_browser = os.environ.get("BILIBILI_COOKIES_FROM_BROWSER", "").strip()
+    if cookies_from_browser:
+        cmd.extend(["--cookies-from-browser", cookies_from_browser])
+
+    extra_args = os.environ.get("YTDLP_EXTRA_ARGS", "").strip()
+    if extra_args:
+        import shlex
+        cmd.extend(shlex.split(extra_args))
+
+    return cmd
 
 def download_asr_model(progress_callback=None):
     """下载 SenseVoiceSmall ASR 模型"""
@@ -162,7 +258,7 @@ def get_video_info(bvid):
     except Exception as e:
         raise Exception(f"获取视频信息失败: {e}")
 
-def download_audio(bvid, page=1, progress_callback=None):
+def download_audio(bvid, page=1, progress_callback=None, source_url=None):
     """下载B站视频的音频"""
     if progress_callback: progress_callback(f"正在下载视频音频 (BV: {bvid}, P: {page})...")
     
@@ -171,15 +267,18 @@ def download_audio(bvid, page=1, progress_callback=None):
     try:
         info = get_video_info(bvid)
         title = info['title']
+        video_url = _resolve_bili_video_url(source_url, bvid, page)
         
         if len(info['pages']) > 1:
             audio_path = os.path.join("intermediate_files", f"{bvid}_p{page}.mp3")
-            cmd = ["yt-dlp", "--playlist-items", str(page), "-x", "--audio-format", "mp3", "--no-check-certificate", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
+            cmd = ["yt-dlp", "--playlist-items", str(page), "-x", "--audio-format", "mp3", "-o", audio_path, video_url]
             if 0 < page <= len(info['pages']):
                 title = f"{title} - {info['pages'][page-1]['part']}"
         else:
             audio_path = os.path.join("intermediate_files", f"{bvid}.mp3")
-            cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "--no-check-certificate", "-o", audio_path, f"https://www.bilibili.com/video/{bvid}"]
+            cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", audio_path, video_url]
+
+        cmd = _extend_yt_dlp_command(cmd)
 
         if not os.path.exists(audio_path):
             startupinfo = None
@@ -190,7 +289,16 @@ def download_audio(bvid, page=1, progress_callback=None):
             
             result = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
             if result.returncode != 0:
-                raise Exception(f"音频下载失败: {result.stderr}")
+                stderr = (result.stderr or "").strip()
+                stdout = (result.stdout or "").strip()
+                combined_output = "\n".join(part for part in [stderr, stdout] if part)
+                if "HTTP Error 412" in combined_output or "Precondition Failed" in combined_output:
+                    raise Exception(
+                        "B站返回 412 Precondition Failed。通常需要登录态、cookies 或更完整的浏览器请求头。"
+                        "请配置 BILIBILI_COOKIE_FILE 或 BILIBILI_COOKIES_FROM_BROWSER 后重试。"
+                        + (f"\n{combined_output}" if combined_output else "")
+                    )
+                raise Exception(f"音频下载失败: {combined_output or '未知错误'}")
         
         return title, audio_path
     except Exception as e:
@@ -314,7 +422,7 @@ def summarize_content(title, text, progress_callback=None):
         )
         return response.choices[0].message.content
     except Exception as e:
-        raise Exception(f"调用AI模型失败: {e}")
+        raise LLMServiceError(_format_llm_error(e)) from e
 
 def summarize_content_stream(title, text, progress_callback=None):
     """使用 AI 模型总结内容（支持 OpenAI 接口，流式）"""
@@ -340,30 +448,61 @@ def summarize_content_stream(title, text, progress_callback=None):
             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
     except Exception as e:
-        raise Exception(f"调用AI模型失败: {e}")
+        raise LLMServiceError(_format_llm_error(e)) from e
+
+
+def save_transcription(bvid, title, text, p=1):
+    """AI 总结失败时也保留已完成的转录稿。"""
+    intermediate_dir = "intermediate_files"
+    os.makedirs(intermediate_dir, exist_ok=True)
+
+    video_url = f"https://www.bilibili.com/video/{bvid}" + (f"?p={p}" if p > 1 else "")
+    cache_key = f"{bvid}_p{p}"
+    txt_path = os.path.join(intermediate_dir, f"{cache_key}_transcription.txt")
+
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write(f"视频标题: {title}\n视频链接: {video_url}\n\n转录内容:\n\n{text}")
+
+    return txt_path
 
 def save_results(bvid, title, text, summary, p=1):
     """保存结果并清理多余缓存"""
-    safe_title = re.sub(r'[<>:"/\\|?*]', '_', title)[:100]
     intermediate_dir = "intermediate_files"
     output_dir = "final_outputs"
     os.makedirs(intermediate_dir, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     video_url = f"https://www.bilibili.com/video/{bvid}" + (f"?p={p}" if p > 1 else "")
-    
-    txt_path = os.path.join(intermediate_dir, f"{safe_title}_transcription.txt")
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(f"视频标题: {title}\n视频链接: {video_url}\n\n转录内容:\n\n{text}")
-        
-    md_path = os.path.join(output_dir, f"{safe_title}_summary.md")
+
+    cache_key = f"{bvid}_p{p}"
+
+    txt_path = save_transcription(bvid, title, text, p)
+
+    md_path = os.path.join(output_dir, f"{cache_key}_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(f"# {title}\n\n## 视频链接\n{video_url}\n\n## 内容总结\n{summary}")
-    
-    # 限制缓存目录大小为 30MB
+
     limit_directory_size(intermediate_dir, 30 * 1024 * 1024)
-        
+
     return txt_path, md_path
+
+def load_cached_summary(bvid, p=1):
+    """尝试加载已缓存的总结内容"""
+    cache_key = f"{bvid}_p{p}"
+    md_path = os.path.join("final_outputs", f"{cache_key}_summary.md")
+    txt_path = os.path.join("intermediate_files", f"{cache_key}_transcription.txt")
+
+    if os.path.exists(md_path):
+        try:
+            with open(md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            summary_start = content.find("## 内容总结\n")
+            if summary_start != -1:
+                summary = content[summary_start + len("## 内容总结\n"):].strip()
+                return summary, txt_path if os.path.exists(txt_path) else None
+        except Exception:
+            pass
+    return None, None
 
 def limit_directory_size(directory, max_size_bytes):
     """限制目录大小，如果超过则删除旧文件"""

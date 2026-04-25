@@ -16,7 +16,9 @@ from bili_core import (
     transcribe_audio,
     summarize_content_stream,
     save_results,
-    preload_asr_model
+    save_transcription,
+    preload_asr_model,
+    load_cached_summary
 )
 import time
 import os
@@ -60,12 +62,59 @@ if 'monitor_started' not in st.session_state:
     thread = threading.Thread(target=monitor_sessions, daemon=True)
     thread.start()
 
+
+def _processing_task_key(bvid, p):
+    return f"{bvid}_p{p}"
+
+
+def _clear_transient_processing_state():
+    """只清理本次处理的临时状态，保留页面任务身份和已完成结果。"""
+    transient_keys = [
+        'video_info',
+        'title',
+        'audio_path',
+        'text',
+        'download_time',
+        'transcribe_time',
+        'current_summary',
+        'final_summary',
+        'timing',
+        'cached_summary',
+    ]
+    for key in transient_keys:
+        st.session_state.pop(key, None)
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
 
-    /* 隐藏顶部默认的 streamlit header */
-    header {visibility: hidden;}
+    /* 压低 Streamlit 原生 chrome，只保留侧边栏折叠控制 */
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+    header[data-testid="stHeader"] {
+        background: transparent;
+        border-bottom: none;
+        box-shadow: none;
+        height: 2.6rem;
+    }
+    div[data-testid="stToolbar"] {
+        top: 0.25rem;
+        right: 0.75rem;
+    }
+    div[class="stDeployButton"] {
+        display: none !important;
+    }
+    span[data-testid="stMainMenu"] {
+        display: none !important;
+    }
+    footer {
+        display: none !important;
+    }
+    [data-testid="collapsedControl"] {
+        top: 0.5rem;
+        left: 0.65rem;
+    }
     
     /* 设定整体背景为动态渐变或高级纯色 */
     .stApp {
@@ -74,7 +123,7 @@ st.markdown("""
     }
 
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 0.8rem;
         padding-bottom: 2rem;
         max-width: 95%; /* 占满屏幕更多空间 */
     }
@@ -281,7 +330,7 @@ st.markdown("""
         border-radius: 12px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.08);
     }
-    
+
     hr {
         border-color: rgba(0,0,0,0.06);
         margin: 1.5rem 0;
@@ -308,12 +357,48 @@ with st.sidebar:
             if not bvid:
                 st.error("❌ 无效的 B 站视频链接")
             else:
-                st.session_state.clear()
+                task_key = _processing_task_key(bvid, p)
+                last_completed_key = st.session_state.get('last_completed_key')
+                same_completed_task = (
+                    last_completed_key == task_key
+                    and st.session_state.get('step', 0) >= 5
+                    and 'final_summary' in st.session_state
+                )
+
+                if same_completed_task:
+                    st.session_state['url'] = url
+                    st.session_state['bvid'] = bvid
+                    st.session_state['p'] = p
+                    st.session_state['task_key'] = task_key
+                    st.session_state.pop('active_task_key', None)
+                    st.session_state['step'] = 5
+                    st.info("这是同一个页面，直接复用已有结果，不再重复处理。")
+                    st.rerun()
+
+                _clear_transient_processing_state()
                 st.session_state['url'] = url
                 st.session_state['bvid'] = bvid
                 st.session_state['p'] = p
-                st.session_state['step'] = 1 # 从第1步开始
-                st.rerun()
+                st.session_state['task_key'] = task_key
+                st.session_state['active_task_key'] = task_key
+
+                cached_summary, _ = load_cached_summary(bvid, p)
+                if cached_summary:
+                    st.session_state['cached_summary'] = cached_summary
+                    st.session_state['last_completed_key'] = task_key
+                    st.session_state.pop('active_task_key', None)
+                    info = get_video_info(bvid)
+                    title = info['title']
+                    if len(info.get('pages', [])) > 1 and 1 <= p <= len(info['pages']):
+                        title = f"{title} - {info['pages'][p-1]['part']}"
+                    st.session_state['title'] = title
+                    st.session_state['video_info'] = info
+                    st.session_state['step'] = 5
+                    st.session_state['final_summary'] = cached_summary
+                    st.rerun()
+                else:
+                    st.session_state['step'] = 1
+                    st.rerun()
         except Exception as e:
             st.error(f"❌ 处理失败: {e}")
     
@@ -356,12 +441,17 @@ with st.sidebar:
     
     html_content = '<div class="progress-section">\n'
     
-    if 'timing' in st.session_state:
-        timing = st.session_state['timing']
+    if st.session_state.get('step', 0) >= 5:
+        timing = st.session_state.get('timing')
         html_content += '<span class="status-badge badge-success">✅ 处理完成！</span><hr/>\n'
-        html_content += '<h3>⏱️ 耗时统计</h3>\n'
-        for k, v in timing.items():
-            html_content += f'<div class="timing-item"><span>{k}</span><span>{v:.1f}秒</span></div>\n'
+        if timing:
+            html_content += '<h3>⏱️ 耗时统计</h3>\n'
+            for k, v in timing.items():
+                html_content += f'<div class="timing-item"><span>{k}</span><span>{v:.1f}秒</span></div>\n'
+        elif st.session_state.get('last_completed_key') == st.session_state.get('task_key'):
+            html_content += '<div class="timing-item"><span>缓存复用</span><span>无需重新处理</span></div>\n'
+        else:
+            html_content += '<div class="timing-item"><span>状态</span><span>已完成</span></div>\n'
     else:
         current_step = st.session_state.get('step', 0)
         if current_step > 0:
@@ -393,7 +483,7 @@ with st.sidebar:
     st.markdown(html_content, unsafe_allow_html=True)
 
 # 主内容的总结显示
-st.markdown('<div class="section-title">📝 视频总结</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">🎬 视频总结</div>', unsafe_allow_html=True)
 
 # 使用一个固定的容器来减少布局抖动
 summary_container = st.container()
@@ -413,6 +503,8 @@ if st.session_state.get('step', 0) in [1, 2, 3] and 'current_summary' not in st.
     ''', unsafe_allow_html=True)
 elif st.session_state.get('step') != 4:
     if 'final_summary' in st.session_state:
+        if 'cached_summary' in st.session_state:
+            st.success("🎉 已加载缓存的总结内容，无需重复处理！")
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["final_summary"]}\n\n</div>', unsafe_allow_html=True)
     elif 'current_summary' in st.session_state:
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["current_summary"]}\n\n</div>', unsafe_allow_html=True)
@@ -437,6 +529,7 @@ if st.session_state.get('step') == 1:
     except Exception as e:
         st.error(f"❌ 获取视频信息失败: {e}")
         st.session_state['step'] = 0
+        st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 2:
     try:
@@ -445,7 +538,7 @@ elif st.session_state.get('step') == 2:
         title = st.session_state['title']
         
         step_start = time.time()
-        title, audio_path = download_audio(bvid, p, None)
+        title, audio_path = download_audio(bvid, p, None, source_url=url)
         download_time = time.time() - step_start
         
         st.session_state['audio_path'] = audio_path
@@ -456,6 +549,7 @@ elif st.session_state.get('step') == 2:
     except Exception as e:
         st.error(f"❌ 下载音频失败: {e}")
         st.session_state['step'] = 0
+        st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 3:
     try:
@@ -475,6 +569,7 @@ elif st.session_state.get('step') == 3:
     except Exception as e:
         st.error(f"❌ 音频转录失败: {e}")
         st.session_state['step'] = 0
+        st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 4:
     try:
@@ -514,11 +609,25 @@ elif st.session_state.get('step') == 4:
         
         st.session_state['final_summary'] = full_summary
         st.session_state['timing'] = timing
+        st.session_state['last_completed_key'] = st.session_state.get('task_key')
+        st.session_state.pop('active_task_key', None)
         st.session_state['step'] = 5
         
         st.rerun()
     except Exception as e:
-        st.error(f"❌ AI 总结失败: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+        error_message = str(e)
+        st.error(f"❌ {error_message}")
+
+        try:
+            bvid = st.session_state.get('bvid')
+            p = st.session_state.get('p', 1)
+            title = st.session_state.get('title', '未命名视频')
+            text = st.session_state.get('text', '')
+            if bvid and text:
+                txt_path = save_transcription(bvid, title, text, p)
+                st.info(f"已保留转录稿：{txt_path}。修复 AI 配置后可重新点击「开始处理」生成总结。")
+        except Exception as save_error:
+            st.warning(f"转录稿保存失败：{save_error}")
+
         st.session_state['step'] = 0
+        st.session_state.pop('active_task_key', None)

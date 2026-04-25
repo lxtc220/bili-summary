@@ -192,7 +192,7 @@ async def process_video_stream(url: str, p: int) -> AsyncGenerator[str, None]:
         
         def run_download():
             try:
-                result = download_audio(bvid, p, None)
+                result = download_audio(bvid, p, None, source_url=url)
                 download_result[0] = result
             except Exception as e:
                 download_error[0] = str(e)
