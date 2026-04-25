@@ -74,7 +74,7 @@ def preload_asr_model(progress_callback=None):
 # AI 模型配置 (支持所有兼容 OpenAI 接口的服务商，如 DeepSeek 官方, 火山引擎等)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com") # 默认 DeepSeek 官方
-MODEL_ID = os.environ.get("MODEL_ID", "deepseek-ai/DeepSeek-V4-Flash")
+MODEL_ID = os.environ.get("MODEL_ID", "deepseek-ai/DeepSeek-V3.2")
 DEFAULT_BILI_USER_AGENT = os.environ.get(
     "BILIBILI_USER_AGENT",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
