@@ -239,6 +239,67 @@ def download_asr_model(progress_callback=None):
     except Exception as e:
         raise Exception(f"下载 ASR 模型失败: {e}")
 
+
+def _get_hidden_startupinfo():
+    """Return Windows startup info that keeps helper console windows hidden."""
+    if sys.platform != "win32":
+        return None
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    return startupinfo
+
+
+def normalize_audio_for_asr(audio_path, progress_callback=None):
+    """Convert input audio to 16kHz mono PCM WAV for stable ASR input."""
+    source_path = Path(audio_path)
+    normalized_path = source_path.with_name(f"{source_path.stem}_16k.wav")
+
+    if normalized_path.exists():
+        if source_path.exists() and source_path.resolve() != normalized_path.resolve():
+            try:
+                source_path.unlink()
+            except OSError:
+                pass
+        return str(normalized_path)
+
+    if progress_callback:
+        progress_callback("正在转换音频为 16kHz 单声道 WAV...")
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source_path),
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        str(normalized_path),
+    ]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        startupinfo=_get_hidden_startupinfo(),
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        combined_output = "\n".join(part for part in [stderr, stdout] if part)
+        raise Exception(f"音频格式转换失败: {combined_output or '未知错误'}")
+
+    if source_path.exists() and source_path.resolve() != normalized_path.resolve():
+        try:
+            source_path.unlink()
+        except OSError:
+            pass
+
+    return str(normalized_path)
+
 def get_video_info(bvid):
     """获取视频详细信息"""
     try:
@@ -281,11 +342,7 @@ def download_audio(bvid, page=1, progress_callback=None, source_url=None):
         cmd = _extend_yt_dlp_command(cmd)
 
         if not os.path.exists(audio_path):
-            startupinfo = None
-            if sys.platform == "win32":
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = 0
+            startupinfo = _get_hidden_startupinfo()
             
             result = subprocess.run(cmd, capture_output=True, text=True, startupinfo=startupinfo)
             if result.returncode != 0:
@@ -299,6 +356,8 @@ def download_audio(bvid, page=1, progress_callback=None, source_url=None):
                         + (f"\n{combined_output}" if combined_output else "")
                     )
                 raise Exception(f"音频下载失败: {combined_output or '未知错误'}")
+
+        audio_path = normalize_audio_for_asr(audio_path, progress_callback)
         
         return title, audio_path
     except Exception as e:
