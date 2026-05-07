@@ -16,9 +16,6 @@ from bili_core import (
     transcribe_audio,
     summarize_content_stream,
     save_results,
-    save_transcription,
-    preload_asr_model,
-    load_cached_summary
 )
 import time
 import os
@@ -26,16 +23,11 @@ import sys
 import threading
 import datetime
 
-# 3. 在应用启动时，立即开启后台线程异步加载模型
-if 'model_preloading_triggered' not in st.session_state:
-    st.session_state['model_preloading_triggered'] = True
-    threading.Thread(target=preload_asr_model, daemon=True).start()
-
 # 自动关闭功能：如果没有活跃连接，则关闭后台
 def monitor_sessions():
-    """后台监控线程：如果 10 秒内没有任何网页连接，则自动关闭服务器"""
+    """后台监控线程：如果 30 分钟内没有任何网页连接，则自动关闭服务器"""
     from streamlit.runtime import get_instance
-    time.sleep(10) # 启动宽限期
+    time.sleep(60) # 启动宽限期增加到 60 秒
     
     inactive_count = 0
     while True:
@@ -46,8 +38,8 @@ def monitor_sessions():
             
             if not sessions:
                 inactive_count += 1
-                if inactive_count >= 5: # 连续 5 次检测到无连接（约 10 秒），则关闭
-                    print("检测到所有网页已关闭，正在自动退出后台进程...")
+                if inactive_count >= 900: # 连续 900 次检测到无连接（约 30 分钟），则关闭
+                    print("检测到长时间无连接，正在自动退出后台进程...")
                     runtime.stop()
                     os._exit(0)
             else:
@@ -381,24 +373,8 @@ with st.sidebar:
                 st.session_state['p'] = p
                 st.session_state['task_key'] = task_key
                 st.session_state['active_task_key'] = task_key
-
-                cached_summary, _ = load_cached_summary(bvid, p)
-                if cached_summary:
-                    st.session_state['cached_summary'] = cached_summary
-                    st.session_state['last_completed_key'] = task_key
-                    st.session_state.pop('active_task_key', None)
-                    info = get_video_info(bvid)
-                    title = info['title']
-                    if len(info.get('pages', [])) > 1 and 1 <= p <= len(info['pages']):
-                        title = f"{title} - {info['pages'][p-1]['part']}"
-                    st.session_state['title'] = title
-                    st.session_state['video_info'] = info
-                    st.session_state['step'] = 5
-                    st.session_state['final_summary'] = cached_summary
-                    st.rerun()
-                else:
-                    st.session_state['step'] = 1
-                    st.rerun()
+                st.session_state['step'] = 1
+                st.rerun()
         except Exception as e:
             st.error(f"❌ 处理失败: {e}")
     
@@ -538,7 +514,7 @@ elif st.session_state.get('step') == 2:
         title = st.session_state['title']
         
         step_start = time.time()
-        title, audio_path = download_audio(bvid, p, None, source_url=url)
+        title, audio_path = download_audio(bvid, p, None)
         download_time = time.time() - step_start
         
         st.session_state['audio_path'] = audio_path
@@ -617,17 +593,6 @@ elif st.session_state.get('step') == 4:
     except Exception as e:
         error_message = str(e)
         st.error(f"❌ {error_message}")
-
-        try:
-            bvid = st.session_state.get('bvid')
-            p = st.session_state.get('p', 1)
-            title = st.session_state.get('title', '未命名视频')
-            text = st.session_state.get('text', '')
-            if bvid and text:
-                txt_path = save_transcription(bvid, title, text, p)
-                st.info(f"已保留转录稿：{txt_path}。修复 AI 配置后可重新点击「开始处理」生成总结。")
-        except Exception as save_error:
-            st.warning(f"转录稿保存失败：{save_error}")
 
         st.session_state['step'] = 0
         st.session_state.pop('active_task_key', None)

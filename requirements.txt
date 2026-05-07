@@ -3,7 +3,8 @@ requests
 pydub
 modelscope
 funasr
-torch
+funasr-onnx
+onnxruntime-gpu
 tqdm
 openai
 fastapi
@@ -11,3 +12,4 @@ uvicorn
 python-multipart
 python-dotenv
 yt-dlp
+streamlit
