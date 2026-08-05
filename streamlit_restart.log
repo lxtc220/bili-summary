@@ -1,0 +1,311 @@
+2026-07-26 19:08:57.863 Uvicorn server started on 0.0.0.0:8501
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.10.180:8501
+
+2026-07-26 19:09:23,351 [INFO] download models from model hub: ms
+2026-07-26 19:09:23,382 [WARNING] trust_remote_code: False
+2026-07-26 19:09:25,311 [INFO] Loading pretrained params from G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt
+2026-07-26 19:09:25,321 [INFO] ckpt: G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt
+2026-07-26 19:09:26,351 [INFO] scope_map: ['module.', 'None']
+2026-07-26 19:09:26,351 [INFO] excludes: None
+2026-07-26 19:09:26,566 [INFO] Loading ckpt: G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt, status: <All keys matched successfully>
+2026-07-26 19:09:27,044 [INFO] Building VAD model.
+2026-07-26 19:09:27,044 [INFO] download models from model hub: ms
+2026-07-26 19:09:27,075 [WARNING] trust_remote_code: False
+2026-07-26 19:09:27,120 [INFO] Loading pretrained params from G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt
+2026-07-26 19:09:27,120 [INFO] ckpt: G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt
+2026-07-26 19:09:27,140 [INFO] scope_map: ['module.', 'None']
+2026-07-26 19:09:27,140 [INFO] excludes: None
+2026-07-26 19:09:27,144 [INFO] Loading ckpt: G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt, status: <All keys matched successfully>
+2026-07-26 19:10:31,018 [INFO] HTTP Request: GET https://api.bilibili.com/x/frontend/finger/spi "HTTP/1.1 200 OK"
+2026-07-26 19:10:31,067 [INFO] HTTP Request: POST https://api.bilibili.com/x/internal/gaia-gateway/ExClimbWuzhi "HTTP/1.1 200 OK"
+2026-07-26 19:10:31,102 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1UMgS6jE9g&aid=116967998493877 "HTTP/1.1 200 OK"
+2026-07-26 19:10:31,561 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1UMgS6jE9g&aid=116967998493877 "HTTP/1.1 200 OK"
+funasr version: 1.3.29.
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:14<00:00, 14.39s/it]{'load_data': '3.129', 'extract_feat': '10.885', 'forward': '14.389', 'batch_size': '1', 'rtf': '0.304'}, : 100%|[34m██████████[0m| 1/1 [00:14<00:00, 14.39s/it]rtf_avg: 0.304: 100%|[34m██████████[0m| 1/1 [00:14<00:00, 14.39s/it]                                                                                            rtf_avg: 0.304: 100%|[34m██████████[0m| 1/1 [00:14<00:00, 14.39s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/93 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 93/93 [00:01<00:00, 72.79it/s][A
+{'load_data': '0.000', 'extract_feat': '0.417', 'forward': '1.288', 'batch_size': '93', 'rtf': '0.007'}, : 100%|[34m██████████[0m| 93/93 [00:01<00:00, 72.79it/s][A
+rtf_avg: 0.007: 100%|[34m██████████[0m| 93/93 [00:01<00:00, 72.79it/s]                                                                                           [Artf_avg: 0.007: 100%|[34m██████████[0m| 93/93 [00:01<00:00, 71.95it/s]
+
+  0%|[34m          [0m| 0/50 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 50/50 [00:00<00:00, 59.03it/s][A
+{'load_data': '0.000', 'extract_feat': '0.377', 'forward': '0.859', 'batch_size': '50', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 50/50 [00:00<00:00, 59.03it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 50/50 [00:00<00:00, 59.03it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 50/50 [00:00<00:00, 57.62it/s]
+
+  0%|[34m          [0m| 0/30 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 30/30 [00:00<00:00, 50.83it/s][A
+{'load_data': '0.000', 'extract_feat': '0.096', 'forward': '0.591', 'batch_size': '30', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 30/30 [00:00<00:00, 50.83it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 30/30 [00:00<00:00, 50.83it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 30/30 [00:00<00:00, 50.51it/s]
+
+  0%|[34m          [0m| 0/14 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 14/14 [00:00<00:00, 21.92it/s][A
+{'load_data': '0.000', 'extract_feat': '0.084', 'forward': '0.634', 'batch_size': '14', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 14/14 [00:00<00:00, 21.92it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 14/14 [00:00<00:00, 21.92it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 14/14 [00:00<00:00, 21.64it/s]
+
+  0%|[34m          [0m| 0/6 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.98it/s][A
+{'load_data': '0.000', 'extract_feat': '0.141', 'forward': '0.470', 'batch_size': '6', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.98it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.98it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.57it/s]
+100%|[31m██████████[0m| 1/1 [00:06<00:00,  6.76s/it]rtf_avg: 0.003, time_speech:  1247.381, time_escape: 3.880: 100%|[31m██████████[0m| 1/1 [00:06<00:00,  6.76s/it]rtf_avg: 0.003, time_speech:  1247.381, time_escape: 3.880: 100%|[31m██████████[0m| 1/1 [00:06<00:00,  6.76s/it]
+2026-07-26 19:11:11,933 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:11:30.627 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:12:31,308 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1F73K6LEsL&aid=116978601693500 "HTTP/1.1 200 OK"
+2026-07-26 19:12:31,698 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1F73K6LEsL&aid=116978601693500 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:07<00:00,  7.32s/it]{'load_data': '1.700', 'extract_feat': '5.590', 'forward': '7.323', 'batch_size': '1', 'rtf': '1.308'}, : 100%|[34m██████████[0m| 1/1 [00:07<00:00,  7.32s/it]rtf_avg: 1.308: 100%|[34m██████████[0m| 1/1 [00:07<00:00,  7.32s/it]                                                                                          rtf_avg: 1.308: 100%|[34m██████████[0m| 1/1 [00:07<00:00,  7.33s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/98 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 98/98 [00:00<00:00, 107.71it/s][A
+{'load_data': '0.000', 'extract_feat': '0.151', 'forward': '0.915', 'batch_size': '98', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 98/98 [00:00<00:00, 107.71it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 98/98 [00:00<00:00, 107.71it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 98/98 [00:00<00:00, 106.55it/s]
+
+  0%|[34m          [0m| 0/68 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 68/68 [00:00<00:00, 114.41it/s][A
+{'load_data': '0.000', 'extract_feat': '0.136', 'forward': '0.594', 'batch_size': '68', 'rtf': '0.002'}, : 100%|[34m██████████[0m| 68/68 [00:00<00:00, 114.41it/s][A
+rtf_avg: 0.002: 100%|[34m██████████[0m| 68/68 [00:00<00:00, 114.41it/s]                                                                                           [Artf_avg: 0.002: 100%|[34m██████████[0m| 68/68 [00:00<00:00, 113.64it/s]
+
+  0%|[34m          [0m| 0/39 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 39/39 [00:00<00:00, 65.88it/s][A
+{'load_data': '0.000', 'extract_feat': '0.107', 'forward': '0.591', 'batch_size': '39', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 39/39 [00:00<00:00, 65.88it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 39/39 [00:00<00:00, 65.88it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 39/39 [00:00<00:00, 65.04it/s]
+
+  0%|[34m          [0m| 0/6 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 6/6 [00:00<00:00, 16.40it/s][A
+{'load_data': '0.000', 'extract_feat': '0.040', 'forward': '0.366', 'batch_size': '6', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 6/6 [00:00<00:00, 16.40it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 16.40it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 16.20it/s]
+100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.44s/it]rtf_avg: 0.003, time_speech:  785.579, time_escape: 2.490: 100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.44s/it]rtf_avg: 0.003, time_speech:  785.579, time_escape: 2.490: 100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.44s/it]
+2026-07-26 19:12:53,025 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:13:25.578 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:15:29,859 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1xq3V6yEpH&aid=116982376570166 "HTTP/1.1 200 OK"
+2026-07-26 19:15:30,251 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1xq3V6yEpH&aid=116982376570166 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:18<00:00, 18.52s/it]{'load_data': '3.503', 'extract_feat': '14.707', 'forward': '18.521', 'batch_size': '1', 'rtf': '0.540'}, : 100%|[34m██████████[0m| 1/1 [00:18<00:00, 18.52s/it]rtf_avg: 0.540: 100%|[34m██████████[0m| 1/1 [00:18<00:00, 18.52s/it]                                                                                            rtf_avg: 0.540: 100%|[34m██████████[0m| 1/1 [00:18<00:00, 18.52s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/138 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 138/138 [00:01<00:00, 98.79it/s][A
+{'load_data': '0.000', 'extract_feat': '0.652', 'forward': '1.398', 'batch_size': '138', 'rtf': '0.007'}, : 100%|[34m██████████[0m| 138/138 [00:01<00:00, 98.79it/s][A
+rtf_avg: 0.007: 100%|[34m██████████[0m| 138/138 [00:01<00:00, 98.79it/s]                                                                                            [Artf_avg: 0.007: 100%|[34m██████████[0m| 138/138 [00:01<00:00, 98.32it/s]
+
+  0%|[34m          [0m| 0/95 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 95/95 [00:00<00:00, 103.45it/s][A
+{'load_data': '0.000', 'extract_feat': '0.421', 'forward': '0.918', 'batch_size': '95', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 95/95 [00:00<00:00, 103.45it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 95/95 [00:00<00:00, 103.45it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 95/95 [00:00<00:00, 97.01it/s] 
+
+  0%|[34m          [0m| 0/66 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 66/66 [00:00<00:00, 70.82it/s][A
+{'load_data': '0.000', 'extract_feat': '0.459', 'forward': '0.932', 'batch_size': '66', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 66/66 [00:00<00:00, 70.82it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 66/66 [00:00<00:00, 70.82it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 66/66 [00:00<00:00, 67.42it/s]
+
+  0%|[34m          [0m| 0/46 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 46/46 [00:00<00:00, 61.38it/s][A
+{'load_data': '0.000', 'extract_feat': '0.292', 'forward': '0.749', 'batch_size': '46', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 46/46 [00:00<00:00, 61.38it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 46/46 [00:00<00:00, 61.38it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 46/46 [00:00<00:00, 60.53it/s]
+
+  0%|[34m          [0m| 0/18 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 18/18 [00:01<00:00, 13.90it/s][A
+{'load_data': '0.000', 'extract_feat': '0.257', 'forward': '1.296', 'batch_size': '18', 'rtf': '0.007'}, : 100%|[34m██████████[0m| 18/18 [00:01<00:00, 13.90it/s][A
+rtf_avg: 0.007: 100%|[34m██████████[0m| 18/18 [00:01<00:00, 13.90it/s]                                                                                           [Artf_avg: 0.007: 100%|[34m██████████[0m| 18/18 [00:01<00:00, 13.79it/s]
+
+  0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.29it/s][A
+{'load_data': '0.000', 'extract_feat': '0.261', 'forward': '0.814', 'batch_size': '10', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.29it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.29it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.20it/s]
+
+  0%|[34m          [0m| 0/7 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 7/7 [00:00<00:00, 11.89it/s][A
+{'load_data': '0.000', 'extract_feat': '0.205', 'forward': '0.589', 'batch_size': '7', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 7/7 [00:00<00:00, 11.89it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 7/7 [00:00<00:00, 11.89it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 7/7 [00:00<00:00, 11.80it/s]
+100%|[31m██████████[0m| 1/1 [00:10<00:00, 10.15s/it]rtf_avg: 0.004, time_speech:  1654.251, time_escape: 6.844: 100%|[31m██████████[0m| 1/1 [00:10<00:00, 10.15s/it]rtf_avg: 0.004, time_speech:  1654.251, time_escape: 6.844: 100%|[31m██████████[0m| 1/1 [00:10<00:00, 10.15s/it]
+2026-07-26 19:16:19,625 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:16:45.662 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:18:08,219 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1vE3L6vEZT&aid=116983483861076 "HTTP/1.1 200 OK"
+2026-07-26 19:18:08,846 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1vE3L6vEZT&aid=116983483861076 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:12<00:00, 12.67s/it]{'load_data': '2.063', 'extract_feat': '10.312', 'forward': '12.666', 'batch_size': '1', 'rtf': '0.361'}, : 100%|[34m██████████[0m| 1/1 [00:12<00:00, 12.67s/it]rtf_avg: 0.361: 100%|[34m██████████[0m| 1/1 [00:12<00:00, 12.67s/it]                                                                                            rtf_avg: 0.361: 100%|[34m██████████[0m| 1/1 [00:12<00:00, 12.67s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/127 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 127/127 [00:01<00:00, 126.10it/s][A
+{'load_data': '0.000', 'extract_feat': '0.231', 'forward': '1.007', 'batch_size': '127', 'rtf': '0.005'}, : 100%|[34m██████████[0m| 127/127 [00:01<00:00, 126.10it/s][A
+rtf_avg: 0.005: 100%|[34m██████████[0m| 127/127 [00:01<00:00, 126.10it/s]                                                                                            [Artf_avg: 0.005: 100%|[34m██████████[0m| 127/127 [00:01<00:00, 125.35it/s]
+
+  0%|[34m          [0m| 0/73 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 73/73 [00:00<00:00, 119.36it/s][A
+{'load_data': '0.000', 'extract_feat': '0.131', 'forward': '0.611', 'batch_size': '73', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 73/73 [00:00<00:00, 119.36it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 73/73 [00:00<00:00, 119.36it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 73/73 [00:00<00:00, 118.18it/s]
+
+  0%|[34m          [0m| 0/39 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 39/39 [00:00<00:00, 67.97it/s][A
+{'load_data': '0.000', 'extract_feat': '0.104', 'forward': '0.574', 'batch_size': '39', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 39/39 [00:00<00:00, 67.97it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 39/39 [00:00<00:00, 67.97it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 39/39 [00:00<00:00, 67.26it/s]
+
+  0%|[34m          [0m| 0/20 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 20/20 [00:00<00:00, 32.95it/s][A
+{'load_data': '0.000', 'extract_feat': '0.081', 'forward': '0.606', 'batch_size': '20', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 20/20 [00:00<00:00, 32.95it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 20/20 [00:00<00:00, 32.95it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 20/20 [00:00<00:00, 32.60it/s]
+
+  0%|[34m          [0m| 0/9 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 9/9 [00:00<00:00, 15.42it/s][A
+{'load_data': '0.000', 'extract_feat': '0.075', 'forward': '0.585', 'batch_size': '9', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 9/9 [00:00<00:00, 15.42it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 9/9 [00:00<00:00, 15.42it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 9/9 [00:00<00:00, 15.29it/s]
+100%|[31m██████████[0m| 1/1 [00:05<00:00,  5.48s/it]rtf_avg: 0.003, time_speech:  1115.022, time_escape: 3.415: 100%|[31m██████████[0m| 1/1 [00:05<00:00,  5.48s/it]rtf_avg: 0.003, time_speech:  1115.022, time_escape: 3.415: 100%|[31m██████████[0m| 1/1 [00:05<00:00,  5.48s/it]
+2026-07-26 19:18:41,529 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:19:05.017 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:22:46,492 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1wfKC65Ejm&aid=116949778505421 "HTTP/1.1 200 OK"
+2026-07-26 19:22:46,879 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1wfKC65Ejm&aid=116949778505421 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:04<00:00,  4.01s/it]{'load_data': '0.607', 'extract_feat': '2.934', 'forward': '4.005', 'batch_size': '1', 'rtf': '0.068'}, : 100%|[34m██████████[0m| 1/1 [00:04<00:00,  4.01s/it]rtf_avg: 0.068: 100%|[34m██████████[0m| 1/1 [00:04<00:00,  4.01s/it]                                                                                          rtf_avg: 0.068: 100%|[34m██████████[0m| 1/1 [00:04<00:00,  4.01s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/29 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 29/29 [00:01<00:00, 27.95it/s][A
+{'load_data': '0.000', 'extract_feat': '0.161', 'forward': '1.038', 'batch_size': '29', 'rtf': '0.008'}, : 100%|[34m██████████[0m| 29/29 [00:01<00:00, 27.95it/s][A
+rtf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:01<00:00, 27.95it/s]                                                                                           [Artf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:01<00:00, 27.60it/s]
+
+  0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.86it/s][A
+{'load_data': '0.000', 'extract_feat': '0.219', 'forward': '0.778', 'batch_size': '10', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.86it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.86it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.69it/s]
+100%|[31m██████████[0m| 1/1 [00:02<00:00,  2.46s/it]rtf_avg: 0.005, time_speech:  358.702, time_escape: 1.840: 100%|[31m██████████[0m| 1/1 [00:02<00:00,  2.46s/it]rtf_avg: 0.005, time_speech:  358.702, time_escape: 1.840: 100%|[31m██████████[0m| 1/1 [00:02<00:00,  2.46s/it]
+2026-07-26 19:22:58,824 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:23:17.468 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:23:55,325 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1HVTi6REWn&aid=116843712877997 "HTTP/1.1 200 OK"
+2026-07-26 19:23:55,920 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1HVTi6REWn&aid=116843712877997 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.32s/it]{'load_data': '0.458', 'extract_feat': '1.745', 'forward': '2.322', 'batch_size': '1', 'rtf': '0.165'}, : 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.32s/it]rtf_avg: 0.165: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.32s/it]                                                                                          rtf_avg: 0.165: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.32s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/29 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 29/29 [00:00<00:00, 29.74it/s][A
+{'load_data': '0.000', 'extract_feat': '0.200', 'forward': '0.975', 'batch_size': '29', 'rtf': '0.008'}, : 100%|[34m██████████[0m| 29/29 [00:00<00:00, 29.74it/s][A
+rtf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:00<00:00, 29.74it/s]                                                                                           [Artf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:00<00:00, 29.49it/s]
+
+  0%|[34m          [0m| 0/3 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 3/3 [00:00<00:00, 14.61it/s][A
+{'load_data': '0.000', 'extract_feat': '0.048', 'forward': '0.206', 'batch_size': '3', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 3/3 [00:00<00:00, 14.61it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 3/3 [00:00<00:00, 14.61it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 3/3 [00:00<00:00, 14.38it/s]
+100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.58s/it]rtf_avg: 0.006, time_speech:  194.069, time_escape: 1.193: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.58s/it]rtf_avg: 0.006, time_speech:  194.069, time_escape: 1.193: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.58s/it]
+2026-07-26 19:24:03,463 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:24:43.817 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:34:52,004 [INFO] download models from model hub: ms
+2026-07-26 19:34:52,044 [WARNING] trust_remote_code: False
+2026-07-26 19:34:53,798 [INFO] Loading pretrained params from G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt
+2026-07-26 19:34:53,810 [INFO] ckpt: G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt
+2026-07-26 19:34:54,921 [INFO] scope_map: ['module.', 'None']
+2026-07-26 19:34:54,922 [INFO] excludes: None
+2026-07-26 19:34:55,114 [INFO] Loading ckpt: G:\traeproject\bili-s\model_cache\models\iic\sense-voice\model.pt, status: <All keys matched successfully>
+2026-07-26 19:34:56,006 [INFO] Building VAD model.
+2026-07-26 19:34:56,021 [INFO] download models from model hub: ms
+2026-07-26 19:34:56,040 [WARNING] trust_remote_code: False
+2026-07-26 19:34:56,071 [INFO] Loading pretrained params from G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt
+2026-07-26 19:34:56,084 [INFO] ckpt: G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt
+2026-07-26 19:34:56,084 [INFO] scope_map: ['module.', 'None']
+2026-07-26 19:34:56,084 [INFO] excludes: None
+2026-07-26 19:34:56,099 [INFO] Loading ckpt: G:\traeproject\bili-s\model_cache\models\iic\fsmn-vad\model.pt, status: <All keys matched successfully>
+2026-07-26 19:35:12,986 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1iFPjzwE35&aid=116159236020755 "HTTP/1.1 200 OK"
+2026-07-26 19:35:13,340 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1iFPjzwE35&aid=116159236020755 "HTTP/1.1 200 OK"
+funasr version: 1.3.29.
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.19s/it]{'load_data': '0.584', 'extract_feat': '1.183', 'forward': '2.198', 'batch_size': '1', 'rtf': '0.043'}, : 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.19s/it]rtf_avg: 0.043: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.19s/it]                                                                                          rtf_avg: 0.043: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.20s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/41 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 41/41 [00:01<00:00, 39.16it/s][A
+{'load_data': '0.000', 'extract_feat': '0.252', 'forward': '1.044', 'batch_size': '41', 'rtf': '0.010'}, : 100%|[34m██████████[0m| 41/41 [00:01<00:00, 39.16it/s][A
+rtf_avg: 0.010: 100%|[34m██████████[0m| 41/41 [00:01<00:00, 39.16it/s]                                                                                           [Artf_avg: 0.010: 100%|[34m██████████[0m| 41/41 [00:01<00:00, 38.79it/s]
+
+  0%|[34m          [0m| 0/3 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 3/3 [00:00<00:00, 12.36it/s][A
+{'load_data': '0.000', 'extract_feat': '0.085', 'forward': '0.242', 'batch_size': '3', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 3/3 [00:00<00:00, 12.36it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 3/3 [00:00<00:00, 12.36it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 3/3 [00:00<00:00, 12.26it/s]
+100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.69s/it]rtf_avg: 0.008, time_speech:  170.876, time_escape: 1.304: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.69s/it]rtf_avg: 0.008, time_speech:  170.876, time_escape: 1.304: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.69s/it]
+2026-07-26 19:35:21,066 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:35:31.117 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:36:57,156 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1KsVh6vE7J&aid=116657183983566 "HTTP/1.1 200 OK"
+2026-07-26 19:36:57,466 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1KsVh6vE7J&aid=116657183983566 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:13<00:00, 13.73s/it]{'load_data': '2.945', 'extract_feat': '10.495', 'forward': '13.734', 'batch_size': '1', 'rtf': '0.374'}, : 100%|[34m██████████[0m| 1/1 [00:13<00:00, 13.73s/it]rtf_avg: 0.374: 100%|[34m██████████[0m| 1/1 [00:13<00:00, 13.73s/it]                                                                                            rtf_avg: 0.374: 100%|[34m██████████[0m| 1/1 [00:13<00:00, 13.74s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/127 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 127/127 [00:01<00:00, 92.67it/s][A
+{'load_data': '0.000', 'extract_feat': '0.577', 'forward': '1.370', 'batch_size': '127', 'rtf': '0.007'}, : 100%|[34m██████████[0m| 127/127 [00:01<00:00, 92.67it/s][A
+rtf_avg: 0.007: 100%|[34m██████████[0m| 127/127 [00:01<00:00, 92.67it/s]                                                                                            [Artf_avg: 0.007: 100%|[34m██████████[0m| 127/127 [00:01<00:00, 92.19it/s]
+
+  0%|[34m          [0m| 0/76 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 76/76 [00:00<00:00, 91.05it/s][A
+{'load_data': '0.000', 'extract_feat': '0.350', 'forward': '0.835', 'batch_size': '76', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 76/76 [00:00<00:00, 91.05it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 76/76 [00:00<00:00, 91.05it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 76/76 [00:00<00:00, 90.20it/s]
+
+  0%|[34m          [0m| 0/50 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 50/50 [00:00<00:00, 64.40it/s][A
+{'load_data': '0.000', 'extract_feat': '0.312', 'forward': '0.776', 'batch_size': '50', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 50/50 [00:00<00:00, 64.40it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 50/50 [00:00<00:00, 64.40it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 50/50 [00:00<00:00, 63.93it/s]
+
+  0%|[34m          [0m| 0/30 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 30/30 [00:00<00:00, 36.95it/s][A
+{'load_data': '0.000', 'extract_feat': '0.330', 'forward': '0.812', 'batch_size': '30', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 30/30 [00:00<00:00, 36.95it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 30/30 [00:00<00:00, 36.95it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 30/30 [00:00<00:00, 36.68it/s]
+
+  0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 10/10 [00:00<00:00, 13.67it/s][A
+{'load_data': '0.000', 'extract_feat': '0.171', 'forward': '0.732', 'batch_size': '10', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 10/10 [00:00<00:00, 13.67it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 13.67it/s]                                                                                           [Artf_avg: 0.004: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 13.55it/s]
+
+  0%|[34m          [0m| 0/2 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 2/2 [00:00<00:00, 14.68it/s][A
+{'load_data': '0.000', 'extract_feat': '0.023', 'forward': '0.137', 'batch_size': '2', 'rtf': '0.002'}, : 100%|[34m██████████[0m| 2/2 [00:00<00:00, 14.68it/s][A
+rtf_avg: 0.002: 100%|[34m██████████[0m| 2/2 [00:00<00:00, 14.68it/s]                                                                                          [Artf_avg: 0.002: 100%|[34m██████████[0m| 2/2 [00:00<00:00, 14.50it/s]
+100%|[31m██████████[0m| 1/1 [00:07<00:00,  7.56s/it]rtf_avg: 0.004, time_speech:  1176.725, time_escape: 4.702: 100%|[31m██████████[0m| 1/1 [00:07<00:00,  7.56s/it]rtf_avg: 0.004, time_speech:  1176.725, time_escape: 4.702: 100%|[31m██████████[0m| 1/1 [00:07<00:00,  7.56s/it]
+2026-07-26 19:37:35,621 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:37:50.912 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 19:38:58,225 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1i6ckezEid&aid=113818629836811 "HTTP/1.1 200 OK"
+2026-07-26 19:38:58,530 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1i6ckezEid&aid=113818629836811 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:05<00:00,  5.49s/it]{'load_data': '1.165', 'extract_feat': '3.862', 'forward': '5.492', 'batch_size': '1', 'rtf': '0.092'}, : 100%|[34m██████████[0m| 1/1 [00:05<00:00,  5.49s/it]rtf_avg: 0.092: 100%|[34m██████████[0m| 1/1 [00:05<00:00,  5.49s/it]                                                                                          rtf_avg: 0.092: 100%|[34m██████████[0m| 1/1 [00:05<00:00,  5.49s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/24 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 24/24 [00:00<00:00, 25.45it/s][A
+{'load_data': '0.000', 'extract_feat': '0.141', 'forward': '0.943', 'batch_size': '24', 'rtf': '0.005'}, : 100%|[34m██████████[0m| 24/24 [00:00<00:00, 25.45it/s][A
+rtf_avg: 0.005: 100%|[34m██████████[0m| 24/24 [00:00<00:00, 25.45it/s]                                                                                           [Artf_avg: 0.005: 100%|[34m██████████[0m| 24/24 [00:00<00:00, 25.22it/s]
+
+  0%|[34m          [0m| 0/10 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.73it/s][A
+{'load_data': '0.000', 'extract_feat': '0.233', 'forward': '0.786', 'batch_size': '10', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.73it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.73it/s]                                                                                           [Artf_avg: 0.003: 100%|[34m██████████[0m| 10/10 [00:00<00:00, 12.47it/s]
+
+  0%|[34m          [0m| 0/2 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 2/2 [00:00<00:00, 11.67it/s][A
+{'load_data': '0.000', 'extract_feat': '0.061', 'forward': '0.170', 'batch_size': '2', 'rtf': '0.003'}, : 100%|[34m██████████[0m| 2/2 [00:00<00:00, 11.67it/s][A
+rtf_avg: 0.003: 100%|[34m██████████[0m| 2/2 [00:00<00:00, 11.67it/s]                                                                                          [Artf_avg: 0.003: 100%|[34m██████████[0m| 2/2 [00:00<00:00, 11.57it/s]
+100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.06s/it]rtf_avg: 0.004, time_speech:  479.403, time_escape: 1.927: 100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.06s/it]rtf_avg: 0.004, time_speech:  479.403, time_escape: 1.927: 100%|[31m██████████[0m| 1/1 [00:03<00:00,  3.06s/it]
+2026-07-26 19:39:14,349 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 19:39:24.457 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.
+2026-07-26 21:34:51,760 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1263K6bEyM&aid=116978350032945 "HTTP/1.1 200 OK"
+2026-07-26 21:34:52,189 [INFO] HTTP Request: GET https://api.bilibili.com/x/web-interface/view?bvid=BV1263K6bEyM&aid=116978350032945 "HTTP/1.1 200 OK"
+  0%|[34m          [0m| 0/1 [00:00<?, ?it/s]100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.99s/it]{'load_data': '0.670', 'extract_feat': '2.260', 'forward': '2.991', 'batch_size': '1', 'rtf': '0.559'}, : 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.99s/it]rtf_avg: 0.559: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.99s/it]                                                                                          rtf_avg: 0.559: 100%|[34m██████████[0m| 1/1 [00:02<00:00,  2.99s/it]
+  0%|[31m          [0m| 0/1 [00:00<?, ?it/s]
+  0%|[34m          [0m| 0/29 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 29/29 [00:00<00:00, 31.09it/s][A
+{'load_data': '0.000', 'extract_feat': '0.192', 'forward': '0.932', 'batch_size': '29', 'rtf': '0.008'}, : 100%|[34m██████████[0m| 29/29 [00:00<00:00, 31.09it/s][A
+rtf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:00<00:00, 31.09it/s]                                                                                           [Artf_avg: 0.008: 100%|[34m██████████[0m| 29/29 [00:00<00:00, 30.74it/s]
+
+  0%|[34m          [0m| 0/6 [00:00<?, ?it/s][A
+100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.51it/s][A
+{'load_data': '0.000', 'extract_feat': '0.146', 'forward': '0.481', 'batch_size': '6', 'rtf': '0.004'}, : 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.51it/s][A
+rtf_avg: 0.004: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.51it/s]                                                                                          [Artf_avg: 0.004: 100%|[34m██████████[0m| 6/6 [00:00<00:00, 12.39it/s]
+100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.98s/it]rtf_avg: 0.006, time_speech:  245.333, time_escape: 1.429: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.98s/it]rtf_avg: 0.006, time_speech:  245.333, time_escape: 1.429: 100%|[31m██████████[0m| 1/1 [00:01<00:00,  1.98s/it]
+2026-07-26 21:35:08,125 [INFO] HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-07-26 21:35:19.649 Please replace `st.components.v1.html` with `st.iframe`.
+
+`st.components.v1.html` will be removed after 2026-06-01.

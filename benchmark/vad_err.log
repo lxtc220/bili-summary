@@ -1,0 +1,10 @@
+WARNING:root:trust_remote_code: True
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+  File "C:\Users\罗霄\AppData\Local\Programs\Python\Python310\lib\site-packages\funasr\auto\auto_model.py", line 324, in generate
+    return self.inference(
+  File "C:\Users\罗霄\AppData\Local\Programs\Python\Python310\lib\site-packages\funasr\auto\auto_model.py", line 381, in inference
+    res = model.inference(**batch, **kwargs)
+  File "C:\Users\罗霄\AppData\Local\Programs\Python\Python310\lib\site-packages\funasr\models\fsmn_vad_streaming\model.py", line 691, in inference
+    audio_sample = torch.cat((cache["prev_samples"], audio_sample_list[0]))
+TypeError: expected Tensor as element 1 in argument 0, but got str

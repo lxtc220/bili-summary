@@ -8,20 +8,56 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. 导入核心功能 (bili_core 内部已做延迟加载优化)
-from bili_core import (
-    extract_bvid_and_p,
-    get_video_info,
-    download_audio,
-    transcribe_audio,
-    summarize_content_stream,
-    save_results,
-)
 import time
 import os
 import sys
 import threading
 import datetime
+import streamlit.components.v1 as components
+from dotenv import load_dotenv
+
+# 读取 .env（bili_core 内部也会读；这里提前读是为了侧边栏的
+# LLM_API_KEY 校验不依赖 bili_core 加载完成）
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
+
+# 进程级标志位：保证 ASR 预加载线程在整个 Streamlit 进程生命周期内只起一次。
+# （模块级变量在 Streamlit 进程存活期间只初始化一次，所有 session 共享，
+# 比 per-session 的 session_state 更适合做"进程级只执行一次"的守护。）
+_asr_preload_triggered = False
+_monitor_started = False
+
+# bili_core 懒加载：首屏渲染不再等待 funasr/torch 等重型依赖 import，
+# 全部挪到后台预热线程里完成（bili_core 内部仍保持 funasr 最先加载，
+# 规避 Windows 上三方库加载顺序导致的段错误）。_backend_ready 表示
+# bili_core 已 import 完成，之后可安全查询真实状态。
+_core = None
+_backend_ready = False
+_backend_lock = threading.Lock()
+
+
+def _get_core():
+    """首次调用时 import bili_core 并缓存（线程安全）。若后台线程正在
+    import，这里会阻塞等待其完成。"""
+    global _core
+    if _core is None:
+        with _backend_lock:
+            if _core is None:
+                import bili_core
+                _core = bili_core
+    return _core
+
+
+def _asr_preload_worker():
+    """后台预热线程：先 import bili_core，再预加载 ASR 模型。"""
+    global _backend_ready
+    try:
+        _get_core().preload_asr_model()
+    except Exception as e:
+        print(f"ASR 预加载失败（首次转写时会自动重试）: {e}", file=sys.stderr)
+    finally:
+        _backend_ready = True
 
 # 自动关闭功能：如果没有活跃连接，则关闭后台
 def monitor_sessions():
@@ -48,11 +84,24 @@ def monitor_sessions():
             pass
         time.sleep(2)
 
-# 只在第一次运行时启动监控线程
-if 'monitor_started' not in st.session_state:
-    st.session_state['monitor_started'] = True
+# 只在第一次运行时启动监控线程（模块级标志，进程内只起一次；
+# 原来的 per-session 守卫会导致每个浏览器 tab 都起一个线程）
+if not _monitor_started:
+    _monitor_started = True
     thread = threading.Thread(target=monitor_sessions, daemon=True)
     thread.start()
+
+
+# ASR 模型异步预加载：用户首次访问网页时就后台加载，等用户点"开始处理"
+# 走到转写步骤时，模型大概率已就绪，转写几乎瞬间开始。
+# 用模块级标志位保证整个进程只起一次预加载线程（模块级变量在 Streamlit
+# 进程存活期间只初始化一次，所有 session 共享，比 per-session 的
+# session_state 更适合做"进程级只执行一次"的守护）。
+if not _asr_preload_triggered:
+    _asr_preload_triggered = True
+    # preload_asr_model 本身幂等（双检锁），直接起线程即可；
+    # bili_core 的 import 也在该线程内完成，不再阻塞首屏渲染
+    threading.Thread(target=_asr_preload_worker, daemon=True).start()
 
 
 def _processing_task_key(bvid, p):
@@ -72,9 +121,46 @@ def _clear_transient_processing_state():
         'final_summary',
         'timing',
         'cached_summary',
+        'cache_hit',
+        'play_completion_sound',
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
+
+
+def play_completion_sound():
+    """使用 Web Audio API 在浏览器端合成一个"叮咚"完成音，无需外部音频文件。"""
+    components.html(
+        """
+<script>
+(function () {
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        function tone(freq, start, dur, gainPeak) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+            gain.gain.exponentialRampToValueAtTime(gainPeak, ctx.currentTime + start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + start);
+            osc.stop(ctx.currentTime + start + dur + 0.05);
+        }
+        // 两声上扬"叮咚"音，柔和提示
+        tone(880, 0, 0.25, 0.25);
+        tone(1320, 0.18, 0.45, 0.25);
+    } catch (e) {
+        console.warn('播放提示音失败:', e);
+    }
+})();
+</script>
+        """,
+        height=0,
+    )
+
 
 st.markdown("""
 <style>
@@ -226,7 +312,13 @@ st.markdown("""
         color: white;
         box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2);
     }
-    
+
+    .step-skipped {
+        background: rgba(243, 244, 246, 0.7);
+        border: 1px dashed rgba(156, 163, 175, 0.8);
+        color: #9ca3af;
+    }
+
     .timing-item {
         display: flex;
         justify-content: space-between;
@@ -338,14 +430,22 @@ with st.sidebar:
         placeholder="https://www.bilibili.com/video/..."
     )
     
-    # 验证 API 密钥
-    from bili_core import LLM_API_KEY
-    if not LLM_API_KEY:
+    # 验证 API 密钥（直接读环境变量，不依赖 bili_core 加载完成）
+    if not os.getenv("LLM_API_KEY"):
         st.warning("⚠️ 未配置 LLM_API_KEY，AI 总结功能将不可用。请在 .env 文件中配置密钥。")
-    
+
+    # AI 思考模式开关：开启后总结更深入但更慢（思维链过程不在界面展示）。
+    # 默认开启，追求总结质量；取消勾选可关闭以加快速度。
+    enable_thinking = st.checkbox(
+        "🧠 深度思考模式",
+        value=True,
+        help="开启后 AI 会先进行思维链推理再总结，质量更高但耗时更长（适用于复杂/长视频）"
+    )
+    st.session_state['enable_thinking'] = enable_thinking
+
     if st.button("开始处理", type="primary", use_container_width=True):
         try:
-            bvid, p = extract_bvid_and_p(url)
+            bvid, p = _get_core().extract_bvid_and_p(url)
             if not bvid:
                 st.error("❌ 无效的 B 站视频链接")
             else:
@@ -367,6 +467,24 @@ with st.sidebar:
                     st.info("这是同一个页面，直接复用已有结果，不再重复处理。")
                     st.rerun()
 
+                # 磁盘缓存命中：该 BV 号之前处理过，转录稿已落盘，跳过「获取信息 /
+                # 下载 / 转录」三步，直接进入第 4 步重新进行 AI 总结。
+                cached_title, cached_text = _get_core().load_cached_transcription(bvid, p)
+                if cached_text:
+                    _clear_transient_processing_state()
+                    st.session_state['url'] = url
+                    st.session_state['bvid'] = bvid
+                    st.session_state['p'] = p
+                    st.session_state['task_key'] = task_key
+                    st.session_state['active_task_key'] = task_key
+                    # 标题解析失败时退回到 BV 号，保证 AI 总结时标题非空
+                    st.session_state['title'] = cached_title or bvid
+                    st.session_state['text'] = cached_text
+                    st.session_state['cache_hit'] = True
+                    st.session_state['cached_summary'] = True
+                    st.session_state['step'] = 4
+                    st.rerun()
+
                 _clear_transient_processing_state()
                 st.session_state['url'] = url
                 st.session_state['bvid'] = bvid
@@ -377,7 +495,18 @@ with st.sidebar:
                 st.rerun()
         except Exception as e:
             st.error(f"❌ 处理失败: {e}")
-    
+
+    # ASR 引擎状态指示器：让用户看到模型是否在后台加载。
+    # bili_core 尚未 import 完成时视为"加载中"，完成后转发真实状态
+    if _backend_ready:
+        asr_status = _get_core().get_asr_model_status()
+    else:
+        asr_status = "loading"
+    if asr_status == "loading":
+        st.info("⏳ 语音识别引擎正在后台预热中…")
+    elif asr_status == "idle":
+        st.caption("🔓 语音识别引擎待命（首次转写时会自动加载）")
+
     if 'video_info' in st.session_state:
         st.divider()
         info = st.session_state['video_info']
@@ -447,8 +576,12 @@ with st.sidebar:
     for i, (icon, name) in enumerate(steps_info):
         step_num = i + 1
         current_step = st.session_state.get('step', 0)
-        
-        if current_step > step_num:
+        cache_hit = st.session_state.get('cache_hit', False)
+
+        # 缓存命中时，前三步直接标记为「已复用缓存」跳过状态
+        if cache_hit and step_num <= 3:
+            html_content += f'<div class="step-card step-skipped">{icon} {name} ⏭️ 已复用缓存</div>\n'
+        elif current_step > step_num:
             html_content += f'<div class="step-card step-completed">{icon} {name} ✅</div>\n'
         elif current_step == step_num:
             html_content += f'<div class="step-card step-running">{icon} {name} ⏳</div>\n'
@@ -482,6 +615,9 @@ elif st.session_state.get('step') != 4:
         if 'cached_summary' in st.session_state:
             st.success("🎉 已加载缓存的总结内容，无需重复处理！")
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["final_summary"]}\n\n</div>', unsafe_allow_html=True)
+        # 仅在"刚刚完成"的那一次渲染时播放提示音，避免刷新/复用时重复响
+        if st.session_state.pop('play_completion_sound', False):
+            play_completion_sound()
     elif 'current_summary' in st.session_state:
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["current_summary"]}\n\n</div>', unsafe_allow_html=True)
     else:
@@ -492,7 +628,7 @@ if st.session_state.get('step') == 1:
         bvid = st.session_state.get('bvid')
         p = st.session_state.get('p', 1)
         
-        info = get_video_info(bvid)
+        info = _get_core().get_video_info(bvid)
         
         title = info['title']
         if len(info.get('pages', [])) > 1 and 1 <= p <= len(info['pages']):
@@ -514,7 +650,7 @@ elif st.session_state.get('step') == 2:
         title = st.session_state['title']
         
         step_start = time.time()
-        title, audio_path = download_audio(bvid, p, None)
+        title, audio_path = _get_core().download_audio(bvid, p, None)
         download_time = time.time() - step_start
         
         st.session_state['audio_path'] = audio_path
@@ -530,16 +666,25 @@ elif st.session_state.get('step') == 2:
 elif st.session_state.get('step') == 3:
     try:
         audio_path = st.session_state['audio_path']
-        
+
         step_start = time.time()
-        text = transcribe_audio(audio_path, None)
+        text = _get_core().transcribe_audio(audio_path, None)
         transcribe_time = time.time() - step_start
-        
+
         if os.path.exists(audio_path):
             os.remove(audio_path)
-        
+
         st.session_state['text'] = text
         st.session_state['transcribe_time'] = transcribe_time
+
+        # 转写完成即落盘：即使后续 AI 总结失败，下次提交同 BV 也能跳过前三步直接重试。
+        _get_core().save_transcription(
+            st.session_state.get('bvid'),
+            st.session_state.get('title'),
+            text,
+            st.session_state.get('p', 1),
+        )
+
         st.session_state['step'] = 4
         st.rerun()
     except Exception as e:
@@ -553,7 +698,11 @@ elif st.session_state.get('step') == 4:
         text = st.session_state['text']
         bvid = st.session_state.get('bvid')
         p = st.session_state.get('p', 1)
-        
+
+        # 缓存命中：提示用户前三步已跳过，正在基于已有转录稿重新生成总结
+        if st.session_state.get('cache_hit'):
+            st.info("✨ 检测到该视频已处理过，已跳过下载与转录，正在重新生成总结…")
+
         step_start = time.time()
         full_summary = ""
         
@@ -563,7 +712,10 @@ elif st.session_state.get('step') == 4:
             # 在等待第一块内容时显示一个简单的加载状态，直接在 placeholder 中占位
             summary_placeholder.markdown('<div class="summary-box">🤖 正在组织语言并生成总结...</div>', unsafe_allow_html=True)
             
-        for chunk in summarize_content_stream(title, text, None):
+        for chunk in _get_core().summarize_content_stream(
+            title, text, None,
+            enable_thinking=st.session_state.get('enable_thinking', False)
+        ):
             full_summary += chunk
             st.session_state['current_summary'] = full_summary
             # 流式输出时，直接更新 markdown 减少 HTML 嵌套层次带来的渲染压力
@@ -574,19 +726,24 @@ elif st.session_state.get('step') == 4:
         # 提取 ID 用于保存
         bvid = st.session_state.get('bvid')
         
-        txt_path, md_path = save_results(bvid, title, text, full_summary, p)
+        txt_path, md_path = _get_core().save_results(bvid, title, text, full_summary, p)
         
+        # 缓存命中时没有执行下载/转录，这两项不存在，用 .get 兜底为 0
+        download_time = st.session_state.get('download_time', 0)
+        transcribe_time = st.session_state.get('transcribe_time', 0)
         timing = {
-            '音频下载': st.session_state['download_time'],
-            '音频转录': st.session_state['transcribe_time'],
+            '音频下载': download_time,
+            '音频转录': transcribe_time,
             'AI总结': summarize_time,
-            '总耗时': st.session_state['download_time'] + st.session_state['transcribe_time'] + summarize_time
+            '总耗时': download_time + transcribe_time + summarize_time
         }
         
         st.session_state['final_summary'] = full_summary
         st.session_state['timing'] = timing
         st.session_state['last_completed_key'] = st.session_state.get('task_key')
         st.session_state.pop('active_task_key', None)
+        # 标记本次为新完成，需要在下一次渲染时播放完成提示音
+        st.session_state['play_completion_sound'] = True
         st.session_state['step'] = 5
         
         st.rerun()
