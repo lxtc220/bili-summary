@@ -392,8 +392,36 @@ def get_video_info(bvid):
         raise Exception(f"获取视频信息失败: {e}")
 
 
+# 模块级：下载互斥锁，按任务键 {bvid}_p{page} 区分。
+# Streamlit 的 rerun（重复点击按钮 / 刷新页面 / autorefresh）可能让
+# download_audio 被并发调用，多个 yt-dlp 写同一输出文件会互相破坏
+# （.part 互踩），导致下载永远无法完成、页面卡死。锁保证同一任务
+# 同时只有一个下载在跑；后到的在等锁期间，先到的已下载完成，文件
+# 已存在 → 直接跳过下载返回。
+_download_locks = {}
+_download_locks_guard = threading.Lock()
+
+
+def _get_download_lock(bvid, page):
+    """按任务键获取（必要时创建）下载互斥锁。"""
+    key = f"{bvid}_p{page}"
+    with _download_locks_guard:
+        lock = _download_locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _download_locks[key] = lock
+        return lock
+
+
 def download_audio(bvid, page=1, progress_callback=None):
-    """下载B站视频的音频"""
+    """下载B站视频的音频（同一任务互斥，防并发写同一文件卡死）"""
+    lock = _get_download_lock(bvid, page)
+    with lock:
+        return _do_download_audio(bvid, page, progress_callback)
+
+
+def _do_download_audio(bvid, page, progress_callback):
+    """download_audio 的实际实现（调用方需已持有该任务的互斥锁）。"""
     if progress_callback: progress_callback(f"正在下载视频音频 (BV: {bvid}, P: {page})...")
 
     os.makedirs("intermediate_files", exist_ok=True)

@@ -8,6 +8,15 @@ echo    Bilibili 视频总结助手
 echo ==========================================
 echo.
 
+rem 端口 8501 已在监听说明服务已启动（start.bat / 后台启动.vbs 都指向 8501），
+rem 直接打开页面即可，避免重复启动出双实例
+netstat -ano | findstr ":8501" | findstr "LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    echo 服务已在运行（端口 8501），正在打开页面...
+    start http://localhost:8501
+    goto end
+)
+
 where python >nul 2>&1
 if not errorlevel 1 (
     python -m streamlit run web_ui.py

@@ -30,8 +30,9 @@ _monitor_started = False
 
 # bili_core 懒加载：首屏渲染不再等待 funasr/torch 等重型依赖 import，
 # 全部挪到后台预热线程里完成（bili_core 内部仍保持 funasr 最先加载，
-# 规避 Windows 上三方库加载顺序导致的段错误）。_backend_ready 表示
-# bili_core 已 import 完成，之后可安全查询真实状态。
+# 规避 Windows 上三方库加载顺序导致的段错误）。_backend_ready 只表示
+# bili_core 已 import 完成（之后可安全调用 _get_core），与 ASR 模型的
+# 加载进度无关——模型加载在后台并行进行，处理流程只到转录步骤才等它。
 _core = None
 _backend_ready = False
 _backend_lock = threading.Lock()
@@ -50,14 +51,26 @@ def _get_core():
 
 
 def _asr_preload_worker():
-    """后台预热线程：先 import bili_core，再预加载 ASR 模型。"""
+    """后台预热线程：先 import bili_core，再预加载 ASR 模型。
+
+    _backend_ready 在 import 完成后立即置位（"可以开始处理"的门槛），
+    模型加载继续在本线程后台进行，成功/失败都不影响处理流程——
+    若加载未完成，用户点「开始处理」仍能正常走到下载音频，到转录
+    步骤时 transcribe_audio 内部会阻塞等待模型就绪（bili_core 的
+    preload_asr_model 双检锁保证只加载一次）。
+    """
     global _backend_ready
+    try:
+        _get_core()
+    except Exception as e:
+        print(f"bili_core 导入失败: {e}", file=sys.stderr)
+    # 无论导入成功与否都放行：失败时真实错误会在用户点击时直接暴露，
+    # 避免 _backend_ready 永远为 False 导致按钮被永久拦截
+    _backend_ready = True
     try:
         _get_core().preload_asr_model()
     except Exception as e:
         print(f"ASR 预加载失败（首次转写时会自动重试）: {e}", file=sys.stderr)
-    finally:
-        _backend_ready = True
 
 # 自动关闭功能：如果没有活跃连接，则关闭后台
 def monitor_sessions():
@@ -443,10 +456,35 @@ with st.sidebar:
     )
     st.session_state['enable_thinking'] = enable_thinking
 
-    if st.button("开始处理", type="primary", use_container_width=True):
+    # 处理中（step 1-4）禁用按钮：防止重复点击把 step 重置回 1，
+    # 导致下载/转录被并发重复执行（多个 yt-dlp 抢同一文件会卡死）。
+    # 预热中点击后（回调阻塞等待 bili_core import / 模型加载时 step 仍为 0），
+    # 通过 _submitted 标记保持按钮禁用，直到流程推进（step 1-4 接管）或
+    # 失败清除标记（step 归 0 时恢复可点）。
+    # 自愈：若 _submitted 残留为 True 但 step 仍是 0（点击那次运行被刷新/断线/
+    # 自动刷新事件中断，没走到设置 step 的代码），说明是上次中断留下的死标记，
+    # 立即清除，避免按钮永久灰掉、页面看起来卡死。
+    _step_now = st.session_state.get('step', 0)
+    if st.session_state.get('_submitted', False) and _step_now == 0:
+        st.session_state['_submitted'] = False
+    _submitted = st.session_state.get('_submitted', False)
+    _disabled = _step_now in (1, 2, 3, 4) or (_step_now == 0 and _submitted)
+    if st.button("开始处理", type="primary", use_container_width=True, disabled=_disabled):
+        # 仅拦截 bili_core 尚未 import 完成的短暂窗口（首次访问约 10-30 秒，
+        # 进程内只发生一次）：此时 _get_core() 会阻塞，直接用 spinner 提示
+        # 并等待 import 完成，一次点击全程有效，不白点。ASR 模型是否加载
+        # 完成完全不参与门控——视频信息获取、音频下载都不依赖模型，只有
+        # 到转录步骤（step 3）才等待模型就绪。
+        if not _backend_ready:
+            # import 只有进程内一次（约 10-30 秒）：阻塞等待期间用 spinner
+            # 明确告知用户在等什么，完成后自动继续，一次点击全程有效
+            with st.spinner("⏳ 正在加载核心组件（首次运行约 10-30 秒），加载完成后将自动开始处理…"):
+                _get_core()
+        st.session_state['_submitted'] = True
         try:
             bvid, p = _get_core().extract_bvid_and_p(url)
             if not bvid:
+                st.session_state['_submitted'] = False
                 st.error("❌ 无效的 B 站视频链接")
             else:
                 task_key = _processing_task_key(bvid, p)
@@ -494,18 +532,25 @@ with st.sidebar:
                 st.session_state['step'] = 1
                 st.rerun()
         except Exception as e:
+            st.session_state['_submitted'] = False
             st.error(f"❌ 处理失败: {e}")
 
-    # ASR 引擎状态指示器：让用户看到模型是否在后台加载。
-    # bili_core 尚未 import 完成时视为"加载中"，完成后转发真实状态
+    # ASR 引擎状态指示器：让用户看到引擎处于哪个阶段。
+    # 注意：这里不做任何自动刷新（不再用 st_autorefresh 整页轮询）——模型
+    # 加载可达数分钟，每 3 秒重跑一次脚本会打断用户输入、页面闪烁。状态
+    # 提示是静态的：下次任何交互（输入/点击/刷新）触发 rerun 时自然更新，
+    # 转写步骤内部会自行轮询等待模型就绪，不依赖这里的刷新。
     if _backend_ready:
         asr_status = _get_core().get_asr_model_status()
+        if asr_status == "loading":
+            st.info("⏳ 语音识别引擎正在后台加载中…（不影响视频下载，转写时会自动等待）")
+        elif asr_status == "ready":
+            st.caption("✅ 语音识别引擎已就绪")
+        else:
+            st.caption("🔓 语音识别引擎待命（首次转写时会自动加载）")
     else:
-        asr_status = "loading"
-    if asr_status == "loading":
-        st.info("⏳ 语音识别引擎正在后台预热中…")
-    elif asr_status == "idle":
-        st.caption("🔓 语音识别引擎待命（首次转写时会自动加载）")
+        # bili_core 尚未 import 完成（首次访问的一次性窗口，约 10-30 秒）
+        st.info("⏳ 后端服务正在初始化…（首次访问需加载识别组件，请稍候）")
 
     if 'video_info' in st.session_state:
         st.divider()
@@ -601,7 +646,7 @@ if st.session_state.get('step', 0) in [1, 2, 3] and 'current_summary' not in st.
     step_msg = {
         1: "📥 正在获取视频详细信息...",
         2: "💾 正在提取视频音频...",
-        3: "🎵 正在进行语音转文字 (此步骤较慢，请耐心等待)..."
+        3: "🎵 正在进行语音转文字（首次使用需先加载语音引擎，请耐心等待）..."
     }
     msg = step_msg.get(st.session_state['step'], "⏳ 正在努力处理中...")
     summary_container.markdown(f'''
@@ -641,6 +686,7 @@ if st.session_state.get('step') == 1:
     except Exception as e:
         st.error(f"❌ 获取视频信息失败: {e}")
         st.session_state['step'] = 0
+        st.session_state['_submitted'] = False
         st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 2:
@@ -661,15 +707,63 @@ elif st.session_state.get('step') == 2:
     except Exception as e:
         st.error(f"❌ 下载音频失败: {e}")
         st.session_state['step'] = 0
+        st.session_state['_submitted'] = False
         st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 3:
     try:
         audio_path = st.session_state['audio_path']
 
+        # 若模型仍在后台加载（预热阶段），这里在脚本 run 内轮询等待：
+        # 每 1 秒更新一次占位里的等待秒数，Streamlit 会把 run 中的元素
+        # 更新实时推送到前端（与步骤 4 流式输出同理），"已等待 N 秒"
+        # 真实滚动，页面不会看起来卡死。加超时兜底，防止模型加载异常
+        # 卡住时页面无限冻结。
+        wait_placeholder = summary_container.empty()
+        MAX_MODEL_WAIT_SEC = 900  # 最多等 15 分钟（首次含模型下载可能很久）
+        if _get_core().get_asr_model_status() == "loading":
+            wait_start = time.time()
+            while _get_core().get_asr_model_status() == "loading":
+                elapsed = int(time.time() - wait_start)
+                if elapsed >= MAX_MODEL_WAIT_SEC:
+                    raise Exception(
+                        f"语音识别引擎加载超时（已等待超过 {MAX_MODEL_WAIT_SEC // 60} 分钟），"
+                        f"请检查后台日志或重启服务"
+                    )
+                wait_placeholder.markdown(
+                    f'<div style="text-align:center; padding:1.5rem 0;">'
+                    f'<div style="font-size:2.2rem; margin-bottom:0.8rem;">⏳</div>'
+                    f'<div style="font-size:1.2rem; color:#4b5563; font-weight:600;">'
+                    f'语音识别引擎正在加载中…</div>'
+                    f'<div style="font-size:0.95rem; color:#9ca3af; margin-top:0.6rem;">'
+                    f'已等待 {elapsed} 秒，加载完成后将自动开始转写'
+                    f'（音频已下载完成，此等待不影响前面流程）'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+                time.sleep(1)
+            # 模型就绪，提示即将开始转写（转写本身可能仍需一段时间）
+            wait_placeholder.markdown(
+                f'<div style="text-align:center; padding:1.5rem 0;">'
+                f'<div style="font-size:2.2rem; margin-bottom:0.8rem;">✅</div>'
+                f'<div style="font-size:1.2rem; color:#059669; font-weight:600;">'
+                f'语音识别引擎已就绪，开始转写…</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        # progress_callback 把"初始化引擎/加载权重/正在转写"等阶段消息实时
+        # 渲染到占位里（预热未完成、由本次转写触发加载的场景下可见）
+        def _transcribe_progress(msg):
+            wait_placeholder.markdown(
+                f'<div style="text-align:center; color:#6b7280; padding:0.5rem 0;">{msg}</div>',
+                unsafe_allow_html=True,
+            )
+
         step_start = time.time()
-        text = _get_core().transcribe_audio(audio_path, None)
+        text = _get_core().transcribe_audio(audio_path, _transcribe_progress)
         transcribe_time = time.time() - step_start
+
+        wait_placeholder.empty()
 
         if os.path.exists(audio_path):
             os.remove(audio_path)
@@ -690,6 +784,7 @@ elif st.session_state.get('step') == 3:
     except Exception as e:
         st.error(f"❌ 音频转录失败: {e}")
         st.session_state['step'] = 0
+        st.session_state['_submitted'] = False
         st.session_state.pop('active_task_key', None)
 
 elif st.session_state.get('step') == 4:
@@ -752,4 +847,5 @@ elif st.session_state.get('step') == 4:
         st.error(f"❌ {error_message}")
 
         st.session_state['step'] = 0
+        st.session_state['_submitted'] = False
         st.session_state.pop('active_task_key', None)
