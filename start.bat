@@ -1,19 +1,34 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-chcp 65001 >nul
 
 echo ==========================================
-echo    Bilibili è§†é¢‘æ€»ç»“åŠ©æ‰‹
+echo    Bilibili ÊÓÆµ×Ü½áÖúÊÖ
 echo ==========================================
 echo.
 
-rem ç«¯å£ 8501 å·²åœ¨ç›‘å¬è¯´æ˜ŽæœåŠ¡å·²å¯åŠ¨ï¼ˆstart.bat / åŽå°å¯åŠ¨.vbs éƒ½æŒ‡å‘ 8501ï¼‰ï¼Œ
-rem ç›´æŽ¥æ‰“å¼€é¡µé¢å³å¯ï¼Œé¿å…é‡å¤å¯åŠ¨å‡ºåŒå®žä¾‹
+rem ¶Ë¿Ú 8501/8502 ÒÑÔÚ¼àÌýËµÃ÷·þÎñÒÑÆô¶¯£¨start.bat / ºóÌ¨Æô¶¯.vbs ¹²ÓÃ´ËÂß¼­£©£¬
+rem Ö±½Ó´ò¿ªÒ³Ãæ¼´¿É£¬±ÜÃâÖØ¸´Æô¶¯³öË«ÊµÀý¡£
+rem ×¢£ºstreamlit ²»´ø --server.port Æô¶¯Ê±£¬Èô 8501 ±»Õ¼ÓÃ»á×Ô¶¯¸ÄÓÃ 8502£¬
+rem ËùÒÔÕâÀï 8501¡¢8502 ¶¼Òª¼ì²é¡£
 netstat -ano | findstr ":8501" | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
-    echo æœåŠ¡å·²åœ¨è¿è¡Œï¼ˆç«¯å£ 8501ï¼‰ï¼Œæ­£åœ¨æ‰“å¼€é¡µé¢...
+    echo ·þÎñÒÑÔÚÔËÐÐ£¨¶Ë¿Ú 8501£©£¬ÕýÔÚ´ò¿ªÒ³Ãæ...
     start http://localhost:8501
+    goto end
+)
+netstat -ano | findstr ":8502" | findstr "LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    echo ·þÎñÒÑÔÚÔËÐÐ£¨¶Ë¿Ú 8502£©£¬ÕýÔÚ´ò¿ªÒ³Ãæ...
+    start http://localhost:8502
+    goto end
+)
+
+rem ÓÅÏÈÓÃ py£¨±¾»ú py Ä¬ÈÏÖ¸Ïò Python312£¬ÊÇ¸ÃÓ¦ÓÃÊµ²âÎÈ¶¨µÄ»·¾³£»
+rem python ÃüÁî¿ÉÄÜÖ¸ÏòÆäËü°æ±¾£¬Èç Python310 ÉÏ funasr Ô¤¼ÓÔØ²»ÎÈ¶¨£©
+where py >nul 2>&1
+if not errorlevel 1 (
+    py -m streamlit run web_ui.py
     goto end
 )
 
@@ -23,16 +38,10 @@ if not errorlevel 1 (
     goto end
 )
 
-where py >nul 2>&1
-if not errorlevel 1 (
-    py -m streamlit run web_ui.py
-    goto end
-)
-
-echo [é”™è¯¯] æœªæ‰¾åˆ° python æˆ– pyï¼Œè¯·ç¡®è®¤å·²å®‰è£… Python 3
+echo [´íÎó] Î´ÕÒµ½ python »ò py£¬ÇëÈ·ÈÏÒÑ°²×° Python 3
 
 :end
 echo.
 echo ------------------------------------------
-echo ç¨‹åºè¿è¡Œç»“æŸï¼ŒæŒ‰ä»»æ„é”®å…³é—­çª—å£...
+echo ³ÌÐòÔËÐÐ½áÊø£¬°´ÈÎÒâ¼ü¹Ø±Õ´°¿Ú...
 pause >nul

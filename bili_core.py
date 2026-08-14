@@ -35,7 +35,7 @@ if os.path.exists(dotenv_path):
 # AI 模型配置 (支持所有兼容 OpenAI 接口的服务商)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
-MODEL_ID = os.environ.get("MODEL_ID", "deepseek-v4-flash")
+MODEL_ID = os.environ.get("MODEL_ID", "deepseek-v4-pro")
 
 # B站配置
 DEFAULT_BILI_USER_AGENT = os.environ.get(

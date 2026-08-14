@@ -105,16 +105,10 @@ if not _monitor_started:
     thread.start()
 
 
-# ASR 模型异步预加载：用户首次访问网页时就后台加载，等用户点"开始处理"
-# 走到转写步骤时，模型大概率已就绪，转写几乎瞬间开始。
-# 用模块级标志位保证整个进程只起一次预加载线程（模块级变量在 Streamlit
-# 进程存活期间只初始化一次，所有 session 共享，比 per-session 的
-# session_state 更适合做"进程级只执行一次"的守护）。
-if not _asr_preload_triggered:
-    _asr_preload_triggered = True
-    # preload_asr_model 本身幂等（双检锁），直接起线程即可；
-    # bili_core 的 import 也在该线程内完成，不再阻塞首屏渲染
-    threading.Thread(target=_asr_preload_worker, daemon=True).start()
+# 不在首屏后台预加载 ASR。
+# FunASR/torch 会加载 Windows 原生 DLL，后台线程与 Streamlit 首屏并行初始化
+# 时可能触发 msvcp140.dll/arrow.dll 访问冲突，导致整个 Python 进程退出，浏览器
+# 随后显示 Connection error。首次转写时再由主线程按既有顺序加载，页面启动更稳。
 
 
 def _processing_task_key(bvid, p):
@@ -136,6 +130,7 @@ def _clear_transient_processing_state():
         'cached_summary',
         'cache_hit',
         'play_completion_sound',
+        'print_requested',
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
@@ -171,6 +166,110 @@ def play_completion_sound():
 })();
 </script>
         """,
+        height=0,
+    )
+
+
+def _build_print_html(title, summary_md):
+    """
+    把总结 markdown 组装成完整的 A4 打印页 HTML（浏览器打印方案）。
+
+    调研结论：md 打印成 A4 的主流做法是浏览器打印（@media print + @page A4
+    + window.print()），零依赖、中文渲染好；pandoc/WeasyPrint 等需重依赖
+    （LaTeX 数 GB / Windows 需 GTK），不适用于本项目。总结先经 Python
+    markdown 库转成 HTML 再套 A4 页面样式。LLM 输出不可信，转换结果会
+    剥离 script/iframe 等活 HTML 与事件属性，防止注入。
+    """
+    import html as html_lib
+    import re as re_lib
+    import markdown as md_lib
+
+    # markdown → HTML（表格/代码块/换行扩展；总结常用的 # ** - 1. 等语法全覆盖）
+    body_html = md_lib.markdown(
+        summary_md,
+        extensions=["tables", "fenced_code", "nl2br"],
+    )
+    # 消毒：剥离 LLM 输出里可能携带的活 HTML 标签（含成对内容）
+    body_html = re_lib.sub(
+        r"<(script|iframe|style|object|embed|link|meta)\b[^>]*>.*?</\1>"
+        r"|<(script|iframe|style|object|embed|link|meta)\b[^>]*/?>",
+        "",
+        body_html,
+        flags=re_lib.IGNORECASE | re_lib.DOTALL,
+    )
+    # 剥离残留的事件属性与 javascript: 链接
+    body_html = re_lib.sub(
+        r"\son\w+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)",
+        "",
+        body_html,
+        flags=re_lib.IGNORECASE,
+    )
+    body_html = re_lib.sub(r"javascript:", "", body_html, flags=re_lib.IGNORECASE)
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    url = st.session_state.get('url', '')
+    title_esc = html_lib.escape(title)
+    url_esc = html_lib.escape(url)
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>视频总结 - {title_esc}</title>
+<style>
+    @page {{ size: A4; margin: 18mm 16mm; }}
+    body {{
+        font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+        font-size: 11pt; line-height: 1.75; color: #1f2937; margin: 0;
+    }}
+    h1 {{ font-size: 20pt; color: #111827; margin: 0 0 4mm 0; page-break-after: avoid; }}
+    h2 {{ font-size: 15pt; color: #111827; margin: 7mm 0 3mm 0; page-break-after: avoid; }}
+    h3 {{ font-size: 12.5pt; color: #1f2937; margin: 5mm 0 2.5mm 0; page-break-after: avoid; }}
+    p {{ margin: 0 0 3mm 0; }}
+    ul, ol {{ margin: 0 0 3mm 0; padding-left: 6mm; }}
+    li {{ margin-bottom: 1mm; }}
+    strong {{ color: #111827; }}
+    blockquote {{ margin: 3mm 0; padding: 2mm 4mm; border-left: 3px solid #e5e7eb; color: #4b5563; }}
+    code {{ font-family: Consolas, "Courier New", monospace; font-size: 10pt; background: #f3f4f6; padding: 0.5mm 1.5mm; border-radius: 2px; }}
+    pre {{ background: #f9fafb; border: 1px solid #e5e7eb; padding: 3mm 4mm; border-radius: 4px; page-break-inside: avoid; }}
+    pre code {{ background: none; padding: 0; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 3mm 0; page-break-inside: avoid; }}
+    th, td {{ border: 1px solid #d1d5db; padding: 1.5mm 3mm; font-size: 10pt; text-align: left; }}
+    th {{ background: #f3f4f6; }}
+    a {{ color: #2563eb; text-decoration: none; word-break: break-all; }}
+    hr {{ border: none; border-top: 1px solid #e5e7eb; margin: 5mm 0; }}
+    .meta {{ color: #6b7280; font-size: 10pt; margin-bottom: 6mm; }}
+    .footer {{ margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 9pt; }}
+    @media print {{ .footer {{ position: fixed; bottom: 0; width: 100%; }} }}
+</style>
+</head>
+<body>
+<h1>{title_esc}</h1>
+<div class="meta">
+    视频链接：<a href="{url_esc}">{url_esc}</a><br>
+    生成时间：{now} ｜ B站视频总结工具
+</div>
+{body_html}
+<div class="footer">由 B站视频总结工具 (Bili-summary) 自动生成</div>
+</body>
+</html>"""
+
+
+def _trigger_print_summary():
+    """
+    弹出浏览器打印对话框，打印 A4 排版的总结（"一次性 flag + 渲染"模式，
+    与 play_completion_sound 相同，避免每次 rerun 重复弹打印框）。
+
+    注入通道：components.html（其 iframe 的 srcdoc 会完整包含传入的 HTML，
+    含 script 标签；sandbox 含 allow-scripts + allow-modals）。iframe 内
+    window.print() 只打印 iframe 自身文档（即排版好的总结页），不影响页面
+    其余 UI。st.markdown 注入 iframe 的方案不可用（iframe 会被前端清洗）。
+    """
+    title = st.session_state.get('title') or '视频总结'
+    summary_md = st.session_state.get('final_summary', '')
+    print_html = _build_print_html(title, summary_md)
+    components.html(
+        print_html + "\n<script>window.print();</script>",
         height=0,
     )
 
@@ -663,6 +762,15 @@ elif st.session_state.get('step') != 4:
         # 仅在"刚刚完成"的那一次渲染时播放提示音，避免刷新/复用时重复响
         if st.session_state.pop('play_completion_sound', False):
             play_completion_sound()
+        # 打印总结：点击置 flag → rerun → 在渲染分支 pop flag 后注入打印
+        # 组件（一次性执行，避免每次 rerun 重复弹打印框）
+        col_print, _ = st.columns([1, 4])
+        with col_print:
+            if st.button("🖨️ 打印总结", use_container_width=True):
+                st.session_state['print_requested'] = True
+                st.rerun()
+        if st.session_state.pop('print_requested', False):
+            _trigger_print_summary()
     elif 'current_summary' in st.session_state:
         summary_container.markdown(f'<div class="summary-box">\n\n{st.session_state["current_summary"]}\n\n</div>', unsafe_allow_html=True)
     else:
