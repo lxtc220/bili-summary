@@ -2,46 +2,18 @@
 setlocal
 cd /d "%~dp0"
 
-echo ==========================================
-echo    Bilibili ÊÓÆµ×Ü½áÖúÊÖ
-echo ==========================================
-echo.
-
-rem ¶Ë¿Ú 8501/8502 ÒÑÔÚ¼àÌýËµÃ÷·þÎñÒÑÆô¶¯£¨start.bat / ºóÌ¨Æô¶¯.vbs ¹²ÓÃ´ËÂß¼­£©£¬
-rem Ö±½Ó´ò¿ªÒ³Ãæ¼´¿É£¬±ÜÃâÖØ¸´Æô¶¯³öË«ÊµÀý¡£
-rem ×¢£ºstreamlit ²»´ø --server.port Æô¶¯Ê±£¬Èô 8501 ±»Õ¼ÓÃ»á×Ô¶¯¸ÄÓÃ 8502£¬
-rem ËùÒÔÕâÀï 8501¡¢8502 ¶¼Òª¼ì²é¡£
-netstat -ano | findstr ":8501" | findstr "LISTENING" >nul 2>&1
+where pythonw >nul 2>&1
 if not errorlevel 1 (
-    echo ·þÎñÒÑÔÚÔËÐÐ£¨¶Ë¿Ú 8501£©£¬ÕýÔÚ´ò¿ªÒ³Ãæ...
-    start http://localhost:8501
-    goto end
-)
-netstat -ano | findstr ":8502" | findstr "LISTENING" >nul 2>&1
-if not errorlevel 1 (
-    echo ·þÎñÒÑÔÚÔËÐÐ£¨¶Ë¿Ú 8502£©£¬ÕýÔÚ´ò¿ªÒ³Ãæ...
-    start http://localhost:8502
-    goto end
-)
-
-rem ÓÅÏÈÓÃ py£¨±¾»ú py Ä¬ÈÏÖ¸Ïò Python312£¬ÊÇ¸ÃÓ¦ÓÃÊµ²âÎÈ¶¨µÄ»·¾³£»
-rem python ÃüÁî¿ÉÄÜÖ¸ÏòÆäËü°æ±¾£¬Èç Python310 ÉÏ funasr Ô¤¼ÓÔØ²»ÎÈ¶¨£©
-where py >nul 2>&1
-if not errorlevel 1 (
-    py -m streamlit run web_ui.py
-    goto end
+    start "" pythonw "%~dp0desktop_app.py"
+    exit /b 0
 )
 
 where python >nul 2>&1
 if not errorlevel 1 (
-    python -m streamlit run web_ui.py
-    goto end
+    start "" python "%~dp0desktop_app.py"
+    exit /b 0
 )
 
-echo [´íÎó] Î´ÕÒµ½ python »ò py£¬ÇëÈ·ÈÏÒÑ°²×° Python 3
-
-:end
-echo.
-echo ------------------------------------------
-echo ³ÌÐòÔËÐÐ½áÊø£¬°´ÈÎÒâ¼ü¹Ø±Õ´°¿Ú...
-pause >nul
+echo æœªæ‰¾åˆ° Pythonï¼Œè¯·å…ˆå®‰è£… Python 3.10 æˆ–æ›´é«˜ç‰ˆæœ¬å¹¶åŠ å…¥ PATHã€‚
+pause
+exit /b 1

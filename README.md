@@ -7,8 +7,9 @@
 - **高效转录**：采用 SenseVoiceSmall ASR 模型，支持多种语言，转录速度极快。
 - **智能总结**：集成大语言模型，提供清晰、专业的视频内容总结（支持所有兼容 OpenAI 接口的服务商）。需要自行配置api密钥和base url，默认使用 [DeepSeek 官方 API](https://platform.deepseek.com/) 的 `deepseek-v4-flash` 模型。
 - **自动分段**：自动处理长视频，确保转录和总结的完整性。
-- **Web UI**：基于 Streamlit 的现代化网页界面，操作简单。
-- **自动管理**：网页关闭后自动退出后台进程，节省系统资源。
+- **桌面界面**：基于 PySide6 的原生 Windows 界面，启动后立即显示窗口；FunASR、Torch 和下载任务在独立后台引擎中运行，不会冻结界面。
+- **后台预热**：程序启动时提前加载语音识别模型，点击“开始处理”后无需再等待核心组件首次初始化。
+- **流式反馈**：实时显示下载、转录和 AI 总结进度，支持取消任务并打开结果文件。
 - **内容理解**：目前仅能理解音频内容，不支持视频内的图像理解，但对于大部分口播视频已经够用了。
 
 ## 🛠️ 安装与配置
@@ -48,16 +49,26 @@ BILIBILI_COOKIES_FROM_BROWSER=chrome
 
 ## 📖 使用方法
 
-直接运行启动脚本或使用 Python 启动：
+双击启动脚本即可打开桌面程序：
 ```bash
 # Windows
 后台启动.vbs
+# 或
+start.bat
 
 ```
 
+也可以直接运行：
+```bash
+python desktop_app.py
+```
+
+首次启动会在后台加载 FunASR 模型，窗口会先打开并显示预热状态。模型加载完成后，“开始处理”按钮才会启用；模型文件已存在时，后续启动会明显更快。
+
 ## 📂 项目结构
 
-- `web_ui.py`: Streamlit 网页界面。
+- `desktop_app.py`: PySide6 桌面界面，只负责交互和展示。
+- `desktop_engine.py`: 后台处理引擎，负责预热 FunASR、下载、转录和 AI 总结。
 - `bili_core.py`: 核心功能逻辑（音频下载、转录、总结）。
 - `requirements.txt`: Python 依赖项。
 - `model_cache/`: ASR 模型缓存目录（运行后自动创建）。

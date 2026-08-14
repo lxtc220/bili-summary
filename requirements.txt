@@ -7,9 +7,6 @@ funasr-onnx
 onnxruntime-gpu
 tqdm
 openai
-fastapi
-uvicorn
-python-multipart
 python-dotenv
 yt-dlp
-streamlit
+PySide6

@@ -262,10 +262,10 @@ def download_sensevoice_model(progress_callback=None):
 
 
 # --- ASR 模型单例与异步预加载 ---
-# 模型实例放模块级全局，所有 session 共享一份（不能放进 Streamlit 的
-# session_state，否则每个浏览器 tab 会复制一份，显存会爆）。
-# 进程存活期间常驻；触发销毁的唯一条件是 Streamlit server 进程退出
-# （30 分钟无连接自动停机 / 停止程序.bat / 手动重启）。
+# 模型实例放模块级全局，后台引擎进程内只保留一份；不能放进界面层状态，
+# 否则每个窗口或会话都可能复制一份，显存会爆。
+# 进程存活期间常驻；触发销毁的唯一条件是后台引擎进程退出
+# （停止程序.bat / 手动重启）。
 _asr_model_instance = None
 _asr_model_lock = threading.Lock()
 
@@ -275,7 +275,7 @@ def preload_asr_model(progress_callback=None):
     加载 SenseVoice + fsmn-vad 组合模型到全局单例（双检锁，幂等）。
 
     可被两类调用方触发：
-      1. web_ui.py 在用户首次访问网页时起的 daemon 线程（后台预热）；
+      1. desktop_engine.py 启动时触发的预热流程；
       2. transcribe_audio() 里，若单例还没就绪则阻塞等待加载完成。
     无论被并发触发多少次，模型只会加载一次。
     """
@@ -345,7 +345,7 @@ def preload_asr_model(progress_callback=None):
 
 def get_asr_model_status():
     """
-    返回 ASR 引擎当前状态（供 web_ui.py 在侧边栏展示进度用，非阻塞）。
+    返回 ASR 引擎当前状态（供后台引擎或界面展示进度用，非阻塞）。
       "ready"   - 已就绪，可立即转写
       "loading" - 正在后台加载中
       "idle"    - 尚未触发加载
