@@ -270,15 +270,54 @@ _CUSTOM_CSS = """
         border: 1px solid #e8eaee;
         border-radius: 14px;
     }
-    /* 总结正文阅读体验：本机思源宋体正文 + 思源黑体标题，雅黑兜底 */
+    /* 总结正文照搬 GitHub markdown 样式（github-markdown-css）：
+       无衬线字体栈、16px/1.5 行高、标题下边框、灰底代码块 */
     .bili-card.summary-body {
-        font-size: 16px; line-height: 1.85;
-        font-family: 'Noto Serif SC', 'Microsoft YaHei', serif !important;
+        font-size: 16px; line-height: 1.5; color: #1f2328;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                     "Noto Sans SC", "Noto Sans", Helvetica, Arial,
+                     sans-serif !important;
+        word-wrap: break-word;
     }
     .summary-body h1, .summary-body h2, .summary-body h3, .summary-body h4 {
-        font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif !important;
-        font-weight: 600;
+        font-family: inherit !important; font-weight: 600; line-height: 1.25;
+        margin: 24px 0 16px; padding-bottom: .3em;
     }
+    .summary-body h1 { font-size: 2em; border-bottom: 1px solid #d0d7de; }
+    .summary-body h2 { font-size: 1.5em; border-bottom: 1px solid #d0d7de; }
+    .summary-body h3 { font-size: 1.25em; }
+    .summary-body h4 { font-size: 1em; }
+    .summary-body p { margin: 0 0 16px; }
+    .summary-body ul, .summary-body ol { padding-left: 2em; margin: 0 0 16px; }
+    .summary-body li { margin-top: .25em; }
+    .summary-body li > p { margin-top: .25em; }
+    .summary-body strong { font-weight: 600; }
+    .summary-body a { color: #0969da; text-decoration: none; }
+    .summary-body a:hover { text-decoration: underline; }
+    .summary-body code {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+                     Consolas, "Liberation Mono", monospace !important;
+        font-size: 85%; padding: .2em .4em; margin: 0;
+        background: rgba(175, 184, 193, .2); border-radius: 6px;
+    }
+    .summary-body pre {
+        background: #f6f8fa; padding: 16px; border-radius: 6px;
+        overflow: auto; margin: 0 0 16px;
+    }
+    .summary-body pre code { background: none; padding: 0; font-size: 100%; }
+    .summary-body blockquote {
+        margin: 0 0 16px; padding: 0 1em; color: #656d76;
+        border-left: .25em solid #d0d7de;
+    }
+    .summary-body table {
+        border-collapse: collapse; margin: 0 0 16px; display: block;
+        width: max-content; max-width: 100%; overflow: auto;
+    }
+    .summary-body th, .summary-body td {
+        border: 1px solid #d0d7de; padding: 6px 13px;
+    }
+    .summary-body th { font-weight: 600; }
+    .summary-body hr { height: .25em; background: #d0d7de; border: 0; margin: 24px 0; }
     }
     .side-card {
         background: #ffffff;
