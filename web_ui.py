@@ -5,9 +5,9 @@
 设计原则（适合 NiceGUI 的做法）：
   - 主题走 NiceGUI 原生体系：ui.colors 把 primary 设为 B 站粉，
     按钮/输入框/复选框的选中态由 Quasar 自动继承品牌色；
-  - 布局用 Tailwind 原生类（浅灰底 + 白卡片 + 细边框），自定义 CSS
-    只保留步骤圆点等少量组件级样式，不全局覆盖框架样式；
-  - 单列内容优先布局：输入 → 步骤条 → 视频信息 → 总结正文。
+  - 左右布局：左侧工具面板（输入/步骤/视频信息），右侧阅读区
+    （总结正文），Tailwind 原生类 + 白卡片细边框；
+  - 侧栏步骤条为竖向圆点连线（pending/active/done/skip 四态）。
 
 架构：长任务在后台线程执行，写共享 TaskState（加锁）；页面用 async
 ui.timer 渲染快照（timer 回调必须 async，同步回调会阻断事件分发）。
@@ -257,17 +257,23 @@ _CUSTOM_CSS = """
         border: 1px solid #e8eaee;
         border-radius: 14px;
     }
+    .side-card {
+        background: #ffffff;
+        border: 1px solid #e8eaee;
+        border-radius: 14px;
+        padding: 0.9rem 1rem;
+    }
     .step-dot {
-        width: 2.1rem; height: 2.1rem; border-radius: 9999px;
+        width: 2rem; height: 2rem; border-radius: 9999px;
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.05rem; transition: all .25s ease;
+        font-size: 1rem; flex: none; transition: all .25s ease;
     }
     .step-dot-pending { background: #f1f5f9; border: 1px solid #e2e8f0; }
     .step-dot-active  { background: #fb7299; color: #fff; box-shadow: 0 0 0 5px rgba(251,114,153,.14); }
     .step-dot-done    { background: #10b981; color: #fff; }
     .step-dot-skip    { background: #fff; border: 1px dashed #cbd5e1; opacity: .75; }
-    .step-line { height: 2px; background: #e5e7eb; border-radius: 2px; width: 2.2rem; }
-    .step-line-done { background: #10b981; }
+    .vstep-line { width: 2px; height: 14px; background: #e5e7eb; margin-left: 15px; border-radius: 2px; }
+    .vstep-line-done { background: #10b981; }
     .phase-chip {
         display: inline-flex; align-items: center; gap: .3rem;
         font-size: .78rem; font-weight: 600; padding: .18rem .7rem;
@@ -470,7 +476,7 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
 
 
 # ---------------------------------------------------------------------------
-# 页面（单列内容优先布局）
+# 页面（左右布局：左侧工具面板 + 右侧阅读区）
 # ---------------------------------------------------------------------------
 
 @ui.page("/")
@@ -482,83 +488,75 @@ def main_page():
     ui.colors(primary=BILI_PINK, secondary=BILI_BLUE)
     ui.add_head_html(_CUSTOM_CSS)
 
-    with ui.column().classes("w-full max-w-3xl mx-auto px-4 py-8 gap-5"):
+    # ---- 左侧工具面板 ----
+    with ui.left_drawer(top_corner=True, bottom_corner=True) \
+            .classes("w-[340px] px-4 py-5 gap-3"):
+        with ui.column().classes("w-full gap-1 px-1 pb-1"):
+            ui.label("🎬 B站视频总结").classes("text-xl font-bold text-slate-800")
+            ui.label("粘贴链接，自动转录并总结").classes("text-xs text-slate-400")
 
-        # ---- 标题 ----
-        with ui.column().classes("items-center gap-1 w-full"):
-            ui.label("🎬 B站视频总结").classes("text-2xl font-bold text-slate-800")
-            ui.label("粘贴视频链接，自动完成下载、转录与 AI 总结").classes(
-                "text-sm text-slate-500")
-
-        # ---- 输入区 ----
-        with ui.card().classes("bili-card w-full p-3 no-shadow"):
+        # 输入与操作
+        with ui.column().classes("w-full side-card gap-2"):
+            url_input = (ui.input(placeholder="https://www.bilibili.com/video/BV...")
+                         .props("dense outlined clearable")
+                         .classes("w-full")
+                         .on("keydown.enter", lambda: on_start()))
             with ui.row().classes("w-full items-center gap-2 no-wrap"):
-                url_input = (ui.input(placeholder="https://www.bilibili.com/video/BV...")
-                             .props("dense outlined clearable")
-                             .classes("flex-1")
-                             .on("keydown.enter", lambda: on_start()))
                 start_btn = (ui.button("开始处理", on_click=lambda: on_start())
                              .props("unelevated no-caps")
-                             .classes("px-5 no-shadow"))
+                             .classes("flex-1 no-shadow"))
                 cancel_btn = (ui.button("取消", on_click=lambda: on_cancel())
                               .props("outline no-caps color=grey-7")
                               .classes("px-4 no-shadow"))
                 cancel_btn.set_visibility(False)
-            with ui.row().classes("w-full items-center justify-between px-1 pt-1"):
-                thinking_check = ui.checkbox(
-                    "🧠 深度思考（更慢但更详细）", value=True,
-                ).classes("text-xs text-slate-500")
-                asr_badge = ui.label().classes("text-xs text-slate-400")
+            thinking_check = ui.checkbox("🧠 深度思考（更慢但更详细）", value=True) \
+                .classes("text-xs text-slate-500")
+            asr_badge = ui.label().classes("text-xs text-slate-400")
 
-        # LLM 密钥提示
         if not os.getenv("LLM_API_KEY"):
-            ui.label("⚠️ 未配置 LLM_API_KEY，AI 总结功能将不可用。请在 .env 中配置。") \
-                .classes("text-xs text-amber-600 -mt-3")
+            ui.label("⚠️ 未配置 LLM_API_KEY，AI 总结不可用，请在 .env 中配置。") \
+                .classes("text-xs text-amber-600 px-1")
 
-        # ---- 步骤条 ----
-        with ui.card().classes("bili-card w-full p-4 no-shadow"):
-            with ui.row().classes("w-full items-center justify-between pb-2"):
+        # 处理进度
+        with ui.column().classes("w-full side-card gap-2"):
+            with ui.row().classes("w-full items-center justify-between"):
                 phase_chip = ui.label("等待开始").classes("phase-chip phase-idle")
                 phase_msg = ui.label().classes(
-                    "text-xs text-slate-400 max-w-[55%] truncate")
-            with ui.row().classes("w-full items-start justify-center gap-1 no-wrap"):
-                step_dots, step_labels, step_lines = [], [], []
-                for i, (icon, name) in enumerate(STEPS):
-                    with ui.column().classes("items-center gap-1.5 flex-1"):
-                        dot = ui.label(icon).classes("step-dot step-dot-pending")
-                        lbl = ui.label(name).classes("text-xs text-slate-400")
-                        step_dots.append(dot)
-                        step_labels.append(lbl)
-                    if i < len(STEPS) - 1:
-                        line = ui.element("div").classes(
-                            "step-line mt-[15px] flex-none")
-                        step_lines.append(line)
-            timing_container = ui.column().classes("w-full pt-2")
+                    "text-xs text-slate-400 max-w-[58%] truncate")
+            step_dots, step_labels, step_lines = [], [], []
+            for i, (icon, name) in enumerate(STEPS):
+                if i > 0:
+                    line = ui.element("div").classes("vstep-line")
+                    step_lines.append(line)
+                with ui.row().classes("items-center gap-3 no-wrap"):
+                    dot = ui.label(icon).classes("step-dot step-dot-pending")
+                    lbl = ui.label(name).classes("text-sm text-slate-400")
+                    step_dots.append(dot)
+                    step_labels.append(lbl)
+            timing_container = ui.column().classes("w-full pt-1")
             timing_container.set_visibility(False)
 
-        # ---- 视频信息 ----
-        info_card = ui.card().classes("bili-card w-full p-3 no-shadow")
-        with ui.row().classes("items-center gap-4 no-wrap"):
-            cover_img = ui.image().classes(
-                "w-36 rounded-lg object-cover flex-none")
-            with ui.column().classes("gap-1 min-w-0"):
-                info_title = ui.label().classes(
-                    "font-semibold text-slate-800 leading-snug")
-                info_owner = ui.label().classes("text-sm text-slate-500")
-                info_meta = ui.label().classes("text-xs text-slate-400")
+        # 视频信息
+        with ui.column().classes("w-full side-card gap-2") as info_card:
+            cover_img = ui.image().classes("w-full rounded-lg")
+            info_title = ui.label().classes(
+                "text-sm font-semibold text-slate-800 leading-snug")
+            with ui.row().classes("items-center gap-3 text-xs text-slate-500"):
+                info_owner = ui.label()
+                info_meta = ui.label()
         info_card.set_visibility(False)
 
-        # ---- 总结正文 ----
+    # ---- 右侧阅读区 ----
+    with ui.column().classes("w-full max-w-3xl mx-auto px-6 py-8 gap-4"):
         with ui.row().classes("w-full items-center justify-between px-1"):
-            ui.label("视频总结").classes("text-base font-semibold text-slate-700")
+            ui.label("视频总结").classes("text-lg font-semibold text-slate-700")
             print_btn = (ui.button("🖨️ 打印总结", on_click=lambda: on_print())
                          .props("outline no-caps flat color=grey-7")
                          .classes("text-xs no-shadow"))
             print_btn.set_visibility(False)
-        with ui.card().classes(
-                "bili-card w-full p-6 min-h-[280px] no-shadow"):
+        with ui.card().classes("bili-card w-full p-6 min-h-[300px] no-shadow"):
             summary_view = ui.markdown(
-                "💡 在上方输入 B 站视频链接，点击「开始处理」生成总结。"
+                "💡 在左侧输入 B 站视频链接，点击「开始处理」生成总结。"
             ).classes("w-full")
 
     # ------------------------------------------------------------------
@@ -663,7 +661,7 @@ def main_page():
         if phase_msg.text != msg:
             phase_msg.text = msg
 
-        # 步骤圆点与连线
+        # 步骤圆点与竖向连线
         for i in range(len(STEPS)):
             step_num = i + 1
             if snap["phase"] == "done":
@@ -685,17 +683,17 @@ def main_page():
                         if c != cls))
                 rendered["dot_cls"][i] = cls
                 step_labels[i].classes(
-                    add="text-slate-600 font-medium" if cls == "step-dot-active"
+                    add="text-slate-700 font-medium" if cls == "step-dot-active"
                     else "text-slate-400",
-                    remove="text-slate-600 font-medium" if cls != "step-dot-active"
+                    remove="text-slate-700 font-medium" if cls != "step-dot-active"
                     else "text-slate-400")
             if i < len(step_lines):
                 line_done = snap["phase"] == "done" or snap["step"] > i + 1
                 if rendered["line_done"][i] != line_done:
                     if line_done:
-                        step_lines[i].classes(add="step-line-done")
+                        step_lines[i].classes(add="vstep-line-done")
                     else:
-                        step_lines[i].classes(remove="step-line-done")
+                        step_lines[i].classes(remove="vstep-line-done")
                     rendered["line_done"][i] = line_done
 
         # 耗时统计
@@ -733,7 +731,7 @@ def main_page():
                 3: snap["message"] or "🎙️ 正在语音转文字…",
             }.get(snap["step"], "⏳ 正在处理…")
             summary_view.set_content(hint)
-        elif streaming_now(snap):
+        elif snap["phase"] == "running" and snap["step"] == 4:
             summary_view.set_content(
                 snap["stream_text"] + " ▌" if snap["stream_text"]
                 else "✨ 正在生成总结…")
@@ -745,12 +743,9 @@ def main_page():
             summary_view.set_content(f"❌ {snap['error']}")
         elif not snap["stream_text"]:
             summary_view.set_content(
-                "💡 在上方输入 B 站视频链接，点击「开始处理」生成总结。")
+                "💡 在左侧输入 B 站视频链接，点击「开始处理」生成总结。")
 
         print_btn.set_visibility(snap["phase"] == "done")
-
-    def streaming_now(snap):
-        return snap["phase"] == "running" and snap["step"] == 4
 
     def _render_controls(snap):
         running = snap["phase"] == "running"
