@@ -614,10 +614,11 @@ def main_page():
     with ui.column().classes("w-full max-w-5xl mx-auto px-8 py-8 gap-4"):
         with ui.row().classes("w-full items-center justify-between px-1"):
             ui.label("视频总结").classes("text-lg font-semibold text-slate-700")
-            print_btn = (ui.button("🖨️ 打印总结", on_click=lambda: on_print())
-                         .props("outline no-caps flat color=grey-7")
-                         .classes("text-xs no-shadow"))
-            print_btn.set_visibility(False)
+            # 必须用原生 <a target=_blank> 链接：之前 ui.open() 通过 websocket
+            # 下行 window.open，脱离用户手势上下文会被弹窗拦截器静默拦截，
+            # 表现为点击打印按钮无反应。链接在任务完成时创建（见 refresh）。
+            print_slot = ui.row()
+            print_slot.set_visibility(False)
         with ui.card().classes("bili-card summary-body w-full p-6 min-h-[300px] no-shadow"):
             summary_view = ui.markdown(
                 "💡 在左侧输入 B 站视频链接，点击「开始处理」生成总结。"
@@ -653,27 +654,12 @@ def main_page():
         else:
             ui.notify("当前没有正在处理的任务。")
 
-    def on_print():
-        with state.lock:
-            title, summary, url, key_src = (
-                state.title, state.final_summary, state.url, state.task_key)
-        if not summary:
-            ui.notify("尚无总结内容可打印。", type="warning")
-            return
-        key = f"{key_src}_{int(time.time())}"
-        with _print_lock:
-            _print_pages[key] = _build_print_html(title or "视频总结", summary, url)
-            # 只保留最近 20 份打印页，避免长驻进程内存增长
-            for old_key in list(_print_pages)[:-20]:
-                _print_pages.pop(old_key, None)
-        ui.open(f"/print?key={key}", new_tab=True)
-
     # ------------------------------------------------------------------
     # 周期渲染：从 TaskState 快照刷新 UI（内容变化时才更新元素）
     # ------------------------------------------------------------------
     rendered = {"signature": None, "dot_cls": [None] * 4,
                 "line_done": [None] * 3, "phase": None, "running": None,
-                "asr": None, "cover": None}
+                "asr": None, "cover": None, "print_key": None}
 
     async def refresh():
         with state.lock:
@@ -682,6 +668,7 @@ def main_page():
                 "video_info": state.video_info, "cover_src": state.cover_src,
                 "timing": state.timing, "error": state.error,
                 "cache_hit": state.cache_hit, "title": state.title,
+                "task_key": state.task_key, "url": state.url,
                 "stream_text": state.stream_text, "final_summary": state.final_summary,
                 "sound_pending": state.sound_pending,
             }
@@ -809,7 +796,26 @@ def main_page():
             summary_view.set_content(
                 "💡 在左侧输入 B 站视频链接，点击「开始处理」生成总结。")
 
-        print_btn.set_visibility(snap["phase"] == "done")
+        # 打印链接：任务完成时预注册打印页并创建原生 <a> 链接。
+        # 用 task_key 作为键，同任务重跑时覆盖为最新结果。
+        if snap["phase"] == "done" and snap.get("final_summary"):
+            if rendered["print_key"] != snap["task_key"]:
+                key = snap["task_key"]
+                with _print_lock:
+                    _print_pages[key] = _build_print_html(
+                        snap.get("title") or "视频总结",
+                        snap["final_summary"], snap.get("url", ""))
+                    for old_key in list(_print_pages)[:-20]:
+                        _print_pages.pop(old_key, None)
+                print_slot.clear()
+                with print_slot:
+                    ui.link("🖨️ 打印总结", target=f"/print?key={key}") \
+                        .props("target=_blank") \
+                        .classes("no-decoration text-xs text-slate-500 "
+                                 "border border-slate-200 rounded-md "
+                                 "px-3 py-1.5 bg-white hover:bg-slate-50")
+                rendered["print_key"] = key
+        print_slot.set_visibility(snap["phase"] == "done")
 
     def _render_controls(snap):
         running = snap["phase"] == "running"
