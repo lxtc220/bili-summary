@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QProcess, QTimer, QUrl, Qt
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -30,7 +30,16 @@ from PySide6.QtWidgets import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+def _resolve_project_root() -> Path:
+    """返回程序根目录；源码运行与 PyInstaller 目录版运行分别处理。"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+PROJECT_ROOT = _resolve_project_root()
+# 后台引擎位于 package_root/engine，但业务数据应统一落在 package_root。
+os.environ.setdefault("BILI_SUMMARY_ROOT", str(PROJECT_ROOT))
 
 
 def _default_log_path() -> Path:
@@ -130,6 +139,11 @@ class MainWindow(QMainWindow):
         self.summary_view = QTextBrowser()
         self.summary_view.setOpenExternalLinks(True)
         self.summary_view.setPlaceholderText("处理完成后，这里会显示 Markdown 总结。")
+        # 流式分片的原文缓冲。分片阶段只向视图追加纯文本，等 result 事件
+        # 到达后再用完整 Markdown 一次性 setMarkdown 渲染；逐片
+        # "toPlainText + setMarkdown 重解析"会破坏文档结构（换行丢失、
+        # # 残留），234 个分片累积后界面彻底失去排版。
+        self._summary_buffer: list[str] = []
         summary_layout.addWidget(self.summary_view, 1)
         summary_button_row = QHBoxLayout()
         self.open_summary_button = QPushButton("打开 Markdown 文件")
@@ -172,7 +186,12 @@ class MainWindow(QMainWindow):
 
     def _engine_command(self) -> tuple[str, list[str]]:
         if getattr(sys, "frozen", False):
-            engine_exe = Path(sys.executable).with_name("desktop_engine.exe")
+            package_root = Path(sys.executable).resolve().parent
+            candidates = (
+                package_root / "engine" / "BiliSummaryEngine.exe",
+                package_root / "BiliSummaryEngine.exe",
+            )
+            engine_exe = next((path for path in candidates if path.exists()), candidates[0])
             return str(engine_exe), ["--engine"]
         return sys.executable, [str(PROJECT_ROOT / "desktop_engine.py"), "--engine"]
 
@@ -245,6 +264,7 @@ class MainWindow(QMainWindow):
         elif event_name == "result":
             self._busy = False
             self._set_processing(False)
+            self._render_summary(event.get("summary", ""))
             self._last_summary_path = event.get("summary_path", "")
             self._last_transcription_path = event.get("transcription_path", "")
             self.open_summary_button.setEnabled(bool(self._last_summary_path))
@@ -271,14 +291,23 @@ class MainWindow(QMainWindow):
                 self.start_button.setEnabled(False)
 
     def _append_summary(self, content: str) -> None:
+        """流式阶段以纯文本追加显示，保持分片原文不经过 Markdown round-trip。"""
         if not content:
             return
-        current = self.summary_view.toPlainText()
-        markdown = current + content
+        self._summary_buffer.append(content)
+        cursor = self.summary_view.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertText(content)
+        self.summary_view.setTextCursor(cursor)
+        scrollbar = self.summary_view.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _render_summary(self, summary: str) -> None:
+        """任务完成后按 Markdown 一次性渲染最终排版。"""
         if hasattr(self.summary_view, "setMarkdown"):
-            self.summary_view.setMarkdown(markdown)
+            self.summary_view.setMarkdown(summary)
         else:
-            self.summary_view.setPlainText(markdown)
+            self.summary_view.setPlainText(summary)
         scrollbar = self.summary_view.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
@@ -301,6 +330,7 @@ class MainWindow(QMainWindow):
         self.progress_label.setText("正在提交任务...")
         self.video_info.clear()
         self.summary_view.clear()
+        self._summary_buffer.clear()
         command = {
             "command": "process",
             "url": url,

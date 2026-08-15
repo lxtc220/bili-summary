@@ -6,6 +6,7 @@ yt-dlp 和 LLM 调用全部留在这个进程中，避免阻塞或拖垮 PySide6
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
@@ -17,7 +18,22 @@ from pathlib import Path
 from typing import Any, Callable
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+def _resolve_project_root() -> Path:
+    """解析源码或 PyInstaller 目录版下的业务根目录。"""
+    configured = os.environ.get("BILI_SUMMARY_ROOT")
+    if configured:
+        return Path(configured).resolve()
+    if getattr(sys, "frozen", False):
+        executable_root = Path(sys.executable).resolve().parent
+        # 正式发布包把引擎放在 package_root/engine 下。
+        if executable_root.name.lower() == "engine":
+            return executable_root.parent
+        return executable_root
+    return Path(__file__).resolve().parent
+
+
+PROJECT_ROOT = _resolve_project_root()
+os.environ.setdefault("BILI_SUMMARY_ROOT", str(PROJECT_ROOT))
 
 
 def _resolve_log_dir() -> Path:
@@ -55,10 +71,26 @@ class _TeeStream:
         return False
 
 
+def _utf8_text_stream(stream, **options):
+    """把 std 流重新包装为 UTF-8 文本流。
+
+    无控制台的子进程环境下（GUI 通过管道启动引擎，或用户直接双击运行），
+    Python 会按系统代码页（中文 Windows 为 GBK）编码 stdin/stdout，而 GUI
+    侧固定按 UTF-8 编解码，不一致会让中文进度消息乱码、含中文的命令解析
+    失败。开发机上曾因 shell 带 PYTHONUTF8=1 掩盖过该问题。流没有底层
+    buffer 时（PyInstaller 窗口版的 NullWriter）原样返回。
+    """
+    try:
+        return io.TextIOWrapper(stream.buffer, encoding="utf-8", **options)
+    except Exception:
+        return stream
+
+
 _log_file = LOG_PATH.open("a", encoding="utf-8", buffering=1)
 _original_stderr = sys.stderr
 sys.stderr = _TeeStream(_original_stderr, _log_file)
-_protocol_stdout = sys.stdout
+_protocol_stdout = _utf8_text_stream(sys.stdout, line_buffering=True)
+sys.stdin = _utf8_text_stream(sys.stdin)
 _emit_lock = threading.Lock()
 
 

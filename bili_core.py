@@ -6,8 +6,18 @@ import threading
 import time
 from pathlib import Path
 
-# 配置信息 - 使用本地 ffmpeg
-ffmpeg_path = os.path.join(os.path.dirname(__file__), "ffmpeg")
+# 配置信息 - 使用本地 ffmpeg。
+# 目录版 EXE 的业务根目录由 GUI 通过 BILI_SUMMARY_ROOT 传给后台引擎，
+# 避免把模型缓存、.env 和结果文件写入 PyInstaller 的 _internal 目录。
+_configured_root = os.environ.get("BILI_SUMMARY_ROOT")
+if _configured_root:
+    PROJECT_ROOT = Path(_configured_root).resolve()
+elif getattr(sys, "frozen", False):
+    PROJECT_ROOT = Path(sys.executable).resolve().parent
+else:
+    PROJECT_ROOT = Path(__file__).resolve().parent
+
+ffmpeg_path = str(PROJECT_ROOT / "ffmpeg")
 if ffmpeg_path not in os.environ["PATH"]:
     os.environ["PATH"] = f"{ffmpeg_path};{os.environ['PATH']}"
 
@@ -28,7 +38,7 @@ import json
 from dotenv import load_dotenv
 
 # 加载环境变量
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+dotenv_path = PROJECT_ROOT / ".env"
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
@@ -171,7 +181,7 @@ def download_paraformer_model(progress_callback=None):
     """下载Paraformer模型"""
     if progress_callback: progress_callback("正在下载Paraformer模型...")
 
-    model_cache_dir = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic")
+    model_cache_dir = str(PROJECT_ROOT / "model_cache" / "models" / "iic")
     os.makedirs(model_cache_dir, exist_ok=True)
 
     model_id = "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
@@ -200,7 +210,7 @@ def download_vad_model(progress_callback=None):
     """下载VAD模型（fsmn-vad，用于检测语音段并据此断句）"""
     if progress_callback: progress_callback("正在下载VAD模型...")
 
-    model_cache_dir = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic")
+    model_cache_dir = str(PROJECT_ROOT / "model_cache" / "models" / "iic")
     os.makedirs(model_cache_dir, exist_ok=True)
 
     model_id = "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
@@ -236,7 +246,7 @@ def download_sensevoice_model(progress_callback=None):
     """
     if progress_callback: progress_callback("正在下载SenseVoice模型...")
 
-    model_cache_dir = os.path.join(os.path.dirname(__file__), "model_cache", "models", "iic")
+    model_cache_dir = str(PROJECT_ROOT / "model_cache" / "models" / "iic")
     os.makedirs(model_cache_dir, exist_ok=True)
 
     model_id = "iic/SenseVoiceSmall"
@@ -308,14 +318,14 @@ def preload_asr_model(progress_callback=None):
                 progress_callback(f"使用设备: {device}")
 
             # 确保模型文件就位
-            local_asr_path = os.path.join(
-                os.path.dirname(__file__), "model_cache", "models", "iic", "sense-voice"
+            local_asr_path = str(
+                PROJECT_ROOT / "model_cache" / "models" / "iic" / "sense-voice"
             )
             if not os.path.exists(local_asr_path):
                 download_sensevoice_model(progress_callback)
 
-            local_vad_path = os.path.join(
-                os.path.dirname(__file__), "model_cache", "models", "iic", "fsmn-vad"
+            local_vad_path = str(
+                PROJECT_ROOT / "model_cache" / "models" / "iic" / "fsmn-vad"
             )
             if not os.path.exists(local_vad_path):
                 download_vad_model(progress_callback)
