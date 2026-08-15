@@ -32,7 +32,7 @@ B站视频总结工具（Bili-summary）：yt-dlp 下载 B 站视频音频 → F
 5. **DeepSeek 思考模式**：V4 默认开思考，必须显式传 `extra_body={"thinking": {"type": "enabled"/"disabled"}}`（嵌套 dict，OpenAI 标准 schema 没有此字段）。流式响应只透传 `delta.content`，丢弃 `reasoning_content`。
 6. **转录缓存格式自洽**：`intermediate_files/{bvid}_p{p}_transcription.txt` 固定格式为 `视频标题: ...\n视频链接: ...\n\n转录内容:\n\n{text}`，`save_transcription` / `load_cached_transcription` / `save_results` 三者必须保持一致；缓存键统一 `{bvid}_p{p}`。
 7. **B 站 412**：下载失败先提示配置 cookies（BILIBILI_COOKIE_FILE 或 BILIBILI_COOKIES_FROM_BROWSER）；yt-dlp 命令已带分块下载/重试参数，勿删。
-8. **自动退出**：web_ui.py 用 NiceGUI 的 `app.on_connect/on_disconnect` 维护连接计数，约 30 分钟无浏览器连接时 `os._exit(0)`；api.py 有独立心跳（30s）。测试时注意。
+8. **自动退出**：web_ui.py 用 NiceGUI 的 `app.on_connect/on_disconnect` 维护连接计数，约 10 分钟无浏览器连接时 `os._exit(0)`；api.py 有独立心跳（30s）。测试时注意。断线时页面会显示中文覆盖层（重新加载按钮 + 每 3 秒自动探测恢复），依赖 NiceGUI 的 `window.onNiceGuiDisconnect/onNiceGuiConnect` JS 钩子。
 9. **无控制台启动必须重定向输出**：pythonw 在零句柄环境（VBS 隐藏启动）下 `sys.stdout/stderr` 为 None，NiceGUI/uvicorn 启动写日志会直接崩溃（表现为双击后毫无反应）。`后台启动.vbs` 通过 `cmd /c "... > runtime_logs\web_ui.log 2>&1"` 提供真实文件句柄，不要去掉重定向。另：`ui.timer` 回调必须 async，同步回调会阻断事件分发。
 
 ## 约定

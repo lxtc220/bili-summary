@@ -24,7 +24,7 @@ import time
 
 from dotenv import load_dotenv
 from nicegui import app, ui
-from starlette.responses import HTMLResponse
+from starlette.responses import HTMLResponse, PlainTextResponse
 
 # 读取 .env（bili_core 内部也会读；这里提前读是为了密钥提示
 # 不依赖 bili_core 加载完成）
@@ -119,7 +119,7 @@ def _idle_monitor():
         with _conn_lock:
             active = _conn_count > 0
             idle_for = time.time() - _last_active
-        if not active and idle_for >= 30 * 60:
+        if not active and idle_for >= 10 * 60:
             print("检测到长时间无连接，正在自动退出后台进程...")
             os._exit(0)
         time.sleep(30)
@@ -243,6 +243,57 @@ _SOUND_JS = """
     } catch (e) { console.warn('播放提示音失败:', e); }
 })();
 """
+
+
+# 断线覆盖层：连接断开时显示中文提示 + 重新加载按钮，
+# 并每 3 秒自动探测服务恢复（配合 后台启动.vbs 唤起服务后自动复活页面）
+_DISCONNECT_OVERLAY = """
+<div id="bili-disconnect"
+     style="display:none; position:fixed; inset:0; z-index:99999;
+            background:rgba(15,23,42,.55); backdrop-filter:blur(3px);
+            align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:16px; padding:28px 34px; max-width:430px;
+              box-shadow:0 20px 50px rgba(0,0,0,.25); text-align:center;">
+    <div style="font-size:2.1rem; margin-bottom:8px;">🔌</div>
+    <div style="font-weight:700; color:#1e293b; font-size:1.05rem; margin-bottom:6px;">
+      与服务器的连接已断开</div>
+    <div style="color:#64748b; font-size:.85rem; margin-bottom:18px; line-height:1.6;">
+      服务可能已自动退出或正在重启。<br>
+      每 2 秒自动探测，恢复后将自动刷新页面；也可双击「后台启动.vbs」唤起服务。</div>
+    <button onclick="location.reload()"
+            style="background:#fb7299; color:#fff; border:none; border-radius:10px;
+                   padding:9px 28px; font-size:.95rem; font-weight:600; cursor:pointer;">
+      重新加载</button>
+  </div>
+</div>
+<script>
+(function () {
+  // 独立健康轮询：NiceGUI 没有 onNiceGuiDisconnect 一类的 JS 钩子
+  //（实测 3.16 不生效），原生重连提示也不含"重新加载"入口。
+  // 这里每 2 秒探测 /healthz，连续 2 次失败（服务器进程已死，如闲置
+  // 自动退出）才弹覆盖层；恢复后自动刷新页面复活。
+  var overlay = document.getElementById('bili-disconnect');
+  var failures = 0;
+  setInterval(function () {
+    fetch('/healthz', { cache: 'no-store' }).then(function (r) {
+      if (r.ok) {
+        if (overlay.style.display === 'flex') location.reload();
+        failures = 0;
+      } else {
+        failures++;
+      }
+    }).catch(function () { failures++; });
+    if (failures >= 2) overlay.style.display = 'flex';
+  }, 2000);
+})();
+</script>
+"""
+
+
+@app.get("/healthz")
+def _healthz() -> PlainTextResponse:
+    """页面健康轮询端点：进程活着即返回 200。"""
+    return PlainTextResponse("ok")
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +602,7 @@ def main_page():
     # 品牌色注入 Quasar 主题：按钮/复选框/输入框焦点色自动继承
     ui.colors(primary=BILI_PINK, secondary=BILI_BLUE)
     ui.add_head_html(_CUSTOM_CSS)
+    ui.add_body_html(_DISCONNECT_OVERLAY)
 
     # ---- 左侧工具面板 ----
     with ui.left_drawer(top_corner=True, bottom_corner=True) \
@@ -860,4 +912,5 @@ if __name__ in {"__main__", "__mp_main__"}:
         reload=False,
         show=not headless,
         favicon="🎬",
+        language="zh-CN",  # 原生断线/重连提示使用中文
     )
