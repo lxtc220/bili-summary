@@ -251,11 +251,20 @@ _SOUND_JS = """
 
 _CUSTOM_CSS = """
 <style>
+    /* 与旧版一致：Inter（Latin）+ 系统中文字体回落 */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    html, body, .q-field, .q-btn, .q-checkbox, .q-markdown {
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI',
+                     'Microsoft YaHei', 'PingFang SC', sans-serif !important;
+    }
     body { background: #f6f7f9; }
     .bili-card {
         background: #ffffff;
         border: 1px solid #e8eaee;
         border-radius: 14px;
+    }
+    /* 总结正文阅读体验：字号与行高接近旧版 summary-box */
+    .bili-card.summary-body { font-size: 15.5px; line-height: 1.78; }
     }
     .side-card {
         background: #ffffff;
@@ -547,14 +556,14 @@ def main_page():
         info_card.set_visibility(False)
 
     # ---- 右侧阅读区 ----
-    with ui.column().classes("w-full max-w-3xl mx-auto px-6 py-8 gap-4"):
+    with ui.column().classes("w-full max-w-5xl mx-auto px-8 py-8 gap-4"):
         with ui.row().classes("w-full items-center justify-between px-1"):
             ui.label("视频总结").classes("text-lg font-semibold text-slate-700")
             print_btn = (ui.button("🖨️ 打印总结", on_click=lambda: on_print())
                          .props("outline no-caps flat color=grey-7")
                          .classes("text-xs no-shadow"))
             print_btn.set_visibility(False)
-        with ui.card().classes("bili-card w-full p-6 min-h-[300px] no-shadow"):
+        with ui.card().classes("bili-card summary-body w-full p-6 min-h-[300px] no-shadow"):
             summary_view = ui.markdown(
                 "💡 在左侧输入 B 站视频链接，点击「开始处理」生成总结。"
             ).classes("w-full")
