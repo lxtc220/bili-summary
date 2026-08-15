@@ -1,12 +1,16 @@
 """B站视频总结工具 - NiceGUI 网页前端。
 
-只 import bili_core，不做业务逻辑（与旧 Streamlit 版职责相同）。
+只 import bili_core，不做业务逻辑。
 
-相比 Streamlit 的 rerun 模型，NiceGUI 是事件驱动的：
-  - 长任务（下载/转录/流式总结）在后台线程执行，只写共享 TaskState（加锁）；
-  - 页面用 ui.timer 周期性从 TaskState 渲染，流式总结直接更新 ui.markdown；
-  - 因此旧版为 rerun 打的所有补丁（下载互斥、按钮灰化自愈、一次性 flag、
-    整页轮询刷新）均不再需要。
+设计原则（适合 NiceGUI 的做法）：
+  - 主题走 NiceGUI 原生体系：ui.colors 把 primary 设为 B 站粉，
+    按钮/输入框/复选框的选中态由 Quasar 自动继承品牌色；
+  - 布局用 Tailwind 原生类（浅灰底 + 白卡片 + 细边框），自定义 CSS
+    只保留步骤圆点等少量组件级样式，不全局覆盖框架样式；
+  - 单列内容优先布局：输入 → 步骤条 → 视频信息 → 总结正文。
+
+架构：长任务在后台线程执行，写共享 TaskState（加锁）；页面用 async
+ui.timer 渲染快照（timer 回调必须 async，同步回调会阻断事件分发）。
 """
 
 import base64
@@ -30,6 +34,9 @@ if os.path.exists(_dotenv_path):
     load_dotenv(_dotenv_path)
 
 DEFAULT_PORT = 8080
+
+BILI_PINK = "#fb7299"
+BILI_BLUE = "#00aeec"
 
 
 # ---------------------------------------------------------------------------
@@ -239,52 +246,43 @@ _SOUND_JS = """
 
 
 # ---------------------------------------------------------------------------
-# 页面自定义样式（B站粉/蓝渐变 + 卡片玻璃拟态，延续旧版视觉）
+# 页面样式：极少量组件级自定义，整体交给 Tailwind + Quasar 主题
 # ---------------------------------------------------------------------------
 
 _CUSTOM_CSS = """
 <style>
-    body { background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); }
-    .bili-title {
-        font-size: 2rem; font-weight: 800; letter-spacing: -0.5px; text-align: center;
-        background: linear-gradient(135deg, #fb7299 0%, #00aeec 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        padding: 0.6rem 0 0.2rem 0;
-    }
+    body { background: #f6f7f9; }
     .bili-card {
-        background: rgba(255, 255, 255, 0.88);
-        border: 1px solid rgba(255, 255, 255, 0.6);
-        border-radius: 18px;
-        box-shadow: 0 8px 26px rgba(0, 0, 0, 0.05);
+        background: #ffffff;
+        border: 1px solid #e8eaee;
+        border-radius: 14px;
     }
-    .step-card {
-        display: flex; align-items: center; gap: 0.5rem;
-        font-weight: 600; font-size: 0.98rem;
-        padding: 0.62rem 0.9rem; border-radius: 13px; margin-bottom: 0.55rem;
-        transition: all 0.3s ease;
+    .step-dot {
+        width: 2.1rem; height: 2.1rem; border-radius: 9999px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.05rem; transition: all .25s ease;
     }
-    .step-pending   { background: rgba(243,244,246,0.7); border: 1px solid rgba(229,231,235,0.8); color: #6b7280; }
-    .step-running   { background: linear-gradient(135deg, #00aeec 0%, #0077ff 100%); color: white; box-shadow: 0 6px 16px rgba(0,174,236,0.3); }
-    .step-completed { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
-    .step-skipped   { background: rgba(243,244,246,0.7); border: 1px dashed rgba(156,163,175,0.8); color: #9ca3af; }
-    .timing-item {
-        display: flex; justify-content: space-between; padding: 0.5rem 0;
-        border-bottom: 1px dashed rgba(0,0,0,0.08); font-size: 0.92rem; color: #4b5563;
+    .step-dot-pending { background: #f1f5f9; border: 1px solid #e2e8f0; }
+    .step-dot-active  { background: #fb7299; color: #fff; box-shadow: 0 0 0 5px rgba(251,114,153,.14); }
+    .step-dot-done    { background: #10b981; color: #fff; }
+    .step-dot-skip    { background: #fff; border: 1px dashed #cbd5e1; opacity: .75; }
+    .step-line { height: 2px; background: #e5e7eb; border-radius: 2px; width: 2.2rem; }
+    .step-line-done { background: #10b981; }
+    .phase-chip {
+        display: inline-flex; align-items: center; gap: .3rem;
+        font-size: .78rem; font-weight: 600; padding: .18rem .7rem;
+        border-radius: 9999px;
     }
-    .timing-item.total { border-bottom: none; font-weight: 700; color: #111827; font-size: 1rem; }
-    .status-badge {
-        display: inline-flex; align-items: center; padding: 0.32rem 1rem;
-        border-radius: 999px; font-size: 0.86rem; font-weight: 700;
+    .phase-idle    { background: #f1f5f9; color: #64748b; }
+    .phase-running { background: rgba(251,114,153,.1); color: #d6336c; }
+    .phase-done    { background: rgba(16,185,129,.12); color: #059669; }
+    .phase-error   { background: #fef2f2; color: #dc2626; }
+    .timing-row {
+        display: flex; justify-content: space-between;
+        font-size: .85rem; color: #64748b; padding: .3rem 0;
+        border-bottom: 1px dashed #eef0f3;
     }
-    .badge-success { background: rgba(16,185,129,0.1); color: #059669; border: 1px solid rgba(16,185,129,0.2); }
-    .badge-warning { background: rgba(245,158,11,0.1); color: #d97706; border: 1px solid rgba(245,158,11,0.2); }
-    .badge-idle    { background: rgba(107,114,128,0.1); color: #4b5563; border: 1px solid rgba(107,114,128,0.2); }
-    .section-title { font-size: 1.2rem; font-weight: 700; color: #111827; margin: 0.4rem 0 0.8rem 0; }
-    .bili-primary-btn {
-        background: linear-gradient(135deg, #fb7299 0%, #00aeec 100%) !important;
-        color: white !important; font-weight: 600; width: 100%;
-        box-shadow: 0 4px 15px rgba(251, 114, 153, 0.3);
-    }
+    .timing-row-total { border-bottom: none; font-weight: 700; color: #1e293b; }
 </style>
 """
 
@@ -294,10 +292,10 @@ _CUSTOM_CSS = """
 # ---------------------------------------------------------------------------
 
 STEPS = [
-    ("📥", "获取视频信息"),
-    ("💾", "下载音频"),
-    ("🎵", "音频转录"),
-    ("🤖", "AI 总结"),
+    ("📄", "获取信息"),
+    ("⬇️", "下载音频"),
+    ("🎙️", "音频转录"),
+    ("✨", "AI 总结"),
 ]
 
 MAX_MODEL_WAIT_SEC = 900  # 模型加载最长等待 15 分钟（首次含模型下载）
@@ -318,14 +316,13 @@ class TaskState:
     def reset(self):
         self.phase = "idle"          # idle / running / done / error / cancelled
         self.step = 0                # 1-4 对应 STEPS；5 表示已完成
-        self.message = ""            # 当前阶段的具体提示（转写等待/流式占位等）
+        self.message = ""            # 当前阶段的具体提示
         self.url = ""
         self.bvid = None
         self.p = 1
         self.task_key = ""
         self.title = ""
         self.cache_hit = False
-        self.cached_summary = False
         self.video_info = None       # get_video_info 返回的 dict
         self.cover_src = None        # base64 data URI 或原始 URL
         self.stream_text = ""        # 流式输出中的总结
@@ -394,7 +391,7 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
         if cached_text:
             state.update(cache_hit=True, step=4,
                          title=cached_title or bvid,
-                         stream_text="", message="检测到已有转录缓存，正在重新生成总结…")
+                         stream_text="", message="已命中转录缓存，正在重新生成总结…")
         else:
             # 第 1 步：获取视频信息（含封面与分 P 标题）
             state.update(step=1, message="正在获取视频信息...")
@@ -425,7 +422,7 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
                             f"语音识别引擎加载超时（已等待超过 {MAX_MODEL_WAIT_SEC // 60} 分钟），"
                             "请检查后台日志或重启服务"
                         )
-                    state.update(message=f"语音识别引擎正在加载中…已等待 {elapsed} 秒")
+                    state.update(message=f"语音识别引擎加载中… 已等待 {elapsed} 秒")
                     time.sleep(1)
 
             started = time.time()
@@ -439,7 +436,7 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
             core.save_transcription(bvid, state.title, text, p)
 
             # 第 4 步：流式 AI 总结
-            state.update(step=4, stream_text="", message="正在调用AI模型进行总结...")
+            state.update(step=4, stream_text="", message="正在调用 AI 模型…")
 
         full_summary = ""
         summarize_started = time.time()
@@ -453,11 +450,11 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
             state.update(stream_text=full_summary)
 
         summarize_time = time.time() - summarize_started
-        txt_path, md_path = core.save_results(bvid, state.title, cached_text if state.cache_hit else text, full_summary, p)
+        core.save_results(bvid, state.title, cached_text if state.cache_hit else text, full_summary, p)
         timing = {
             "音频下载": state.download_time,
             "音频转录": state.transcribe_time,
-            "AI总结": summarize_time,
+            "AI 总结": summarize_time,
             "总耗时": state.download_time + state.transcribe_time + summarize_time,
         }
         state.update(
@@ -473,7 +470,7 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
 
 
 # ---------------------------------------------------------------------------
-# 页面
+# 页面（单列内容优先布局）
 # ---------------------------------------------------------------------------
 
 @ui.page("/")
@@ -481,62 +478,88 @@ def main_page():
     state = TaskState()
     _start_asr_preload()
 
+    # 品牌色注入 Quasar 主题：按钮/复选框/输入框焦点色自动继承
+    ui.colors(primary=BILI_PINK, secondary=BILI_BLUE)
     ui.add_head_html(_CUSTOM_CSS)
 
-    # ---- 左侧输入栏 ----
-    with ui.left_drawer(top_corner=True, bottom_corner=True).classes(
-        "w-[340px] px-4 pt-2"
-    ):
-        ui.html('<div class="bili-title">🎬 B站视频总结</div>')
-        url_input = (ui.input(placeholder="https://www.bilibili.com/video/BV...")
-                     .props("dense outlined clearable")
-                     .classes("w-full")
-                     .on("keydown.enter", lambda: on_start()))
+    with ui.column().classes("w-full max-w-3xl mx-auto px-4 py-8 gap-5"):
 
+        # ---- 标题 ----
+        with ui.column().classes("items-center gap-1 w-full"):
+            ui.label("🎬 B站视频总结").classes("text-2xl font-bold text-slate-800")
+            ui.label("粘贴视频链接，自动完成下载、转录与 AI 总结").classes(
+                "text-sm text-slate-500")
+
+        # ---- 输入区 ----
+        with ui.card().classes("bili-card w-full p-3 no-shadow"):
+            with ui.row().classes("w-full items-center gap-2 no-wrap"):
+                url_input = (ui.input(placeholder="https://www.bilibili.com/video/BV...")
+                             .props("dense outlined clearable")
+                             .classes("flex-1")
+                             .on("keydown.enter", lambda: on_start()))
+                start_btn = (ui.button("开始处理", on_click=lambda: on_start())
+                             .props("unelevated no-caps")
+                             .classes("px-5 no-shadow"))
+                cancel_btn = (ui.button("取消", on_click=lambda: on_cancel())
+                              .props("outline no-caps color=grey-7")
+                              .classes("px-4 no-shadow"))
+                cancel_btn.set_visibility(False)
+            with ui.row().classes("w-full items-center justify-between px-1 pt-1"):
+                thinking_check = ui.checkbox(
+                    "🧠 深度思考（更慢但更详细）", value=True,
+                ).classes("text-xs text-slate-500")
+                asr_badge = ui.label().classes("text-xs text-slate-400")
+
+        # LLM 密钥提示
         if not os.getenv("LLM_API_KEY"):
-            ui.label("⚠️ 未配置 LLM_API_KEY，AI 总结功能将不可用。请在 .env 文件中配置密钥。") \
-                .classes("text-sm text-orange-600")
+            ui.label("⚠️ 未配置 LLM_API_KEY，AI 总结功能将不可用。请在 .env 中配置。") \
+                .classes("text-xs text-amber-600 -mt-3")
 
-        thinking_check = ui.checkbox("🧠 深度思考模式（质量更高但更慢）", value=True) \
-            .classes("text-sm")
+        # ---- 步骤条 ----
+        with ui.card().classes("bili-card w-full p-4 no-shadow"):
+            with ui.row().classes("w-full items-center justify-between pb-2"):
+                phase_chip = ui.label("等待开始").classes("phase-chip phase-idle")
+                phase_msg = ui.label().classes(
+                    "text-xs text-slate-400 max-w-[55%] truncate")
+            with ui.row().classes("w-full items-start justify-center gap-1 no-wrap"):
+                step_dots, step_labels, step_lines = [], [], []
+                for i, (icon, name) in enumerate(STEPS):
+                    with ui.column().classes("items-center gap-1.5 flex-1"):
+                        dot = ui.label(icon).classes("step-dot step-dot-pending")
+                        lbl = ui.label(name).classes("text-xs text-slate-400")
+                        step_dots.append(dot)
+                        step_labels.append(lbl)
+                    if i < len(STEPS) - 1:
+                        line = ui.element("div").classes(
+                            "step-line mt-[15px] flex-none")
+                        step_lines.append(line)
+            timing_container = ui.column().classes("w-full pt-2")
+            timing_container.set_visibility(False)
 
-        start_btn = ui.button("开始处理", on_click=lambda: on_start()) \
-            .classes("bili-primary-btn")
-        cancel_btn = (ui.button("取消", on_click=lambda: on_cancel())
-                      .props("outline color=grey-8")
-                      .classes("w-full"))
-        cancel_btn.set_visibility(False)
+        # ---- 视频信息 ----
+        info_card = ui.card().classes("bili-card w-full p-3 no-shadow")
+        with ui.row().classes("items-center gap-4 no-wrap"):
+            cover_img = ui.image().classes(
+                "w-36 rounded-lg object-cover flex-none")
+            with ui.column().classes("gap-1 min-w-0"):
+                info_title = ui.label().classes(
+                    "font-semibold text-slate-800 leading-snug")
+                info_owner = ui.label().classes("text-sm text-slate-500")
+                info_meta = ui.label().classes("text-xs text-slate-400")
+        info_card.set_visibility(False)
 
-        asr_badge = ui.label().classes("text-xs text-gray-500 mt-1")
-
-        # 视频信息卡片
-        cover_img = ui.image().classes("w-full rounded-xl shadow-md")
-        cover_img.set_visibility(False)
-        info_title = ui.label().classes("text-base font-bold mt-2")
-        info_owner = ui.label().classes("text-sm text-gray-500")
-        info_title.set_visibility(False)
-        info_owner.set_visibility(False)
-
-        ui.html('<div class="section-title" style="margin-top:1rem;">⚡ 处理进度</div>')
-        with ui.card().classes("bili-card w-full p-4"):
-            status_badge = ui.label().classes("status-badge badge-idle")
-            step_labels = []
-            for icon, name in STEPS:
-                row = ui.label(f"{icon} {name}").classes("step-card step-pending w-full")
-                step_labels.append(row)
-
-        timing_container = ui.column().classes("w-full gap-0")
-        timing_container.set_visibility(False)
-
-    # ---- 主内容区 ----
-    with ui.column().classes("w-full max-w-[860px] mx-auto px-4 pb-8"):
-        ui.html('<div class="section-title" style="margin-top:1.2rem;">🎬 视频总结</div>')
-        with ui.card().classes("bili-card w-full p-6 min-h-[300px]"):
-            summary_view = ui.markdown("💡 输入视频链接并点击「开始处理」以生成总结") \
-                .classes("w-full")
-        print_btn = (ui.button("🖨️ 打印总结", on_click=lambda: on_print())
-                     .props("outline color=blue-8"))
-        print_btn.set_visibility(False)
+        # ---- 总结正文 ----
+        with ui.row().classes("w-full items-center justify-between px-1"):
+            ui.label("视频总结").classes("text-base font-semibold text-slate-700")
+            print_btn = (ui.button("🖨️ 打印总结", on_click=lambda: on_print())
+                         .props("outline no-caps flat color=grey-7")
+                         .classes("text-xs no-shadow"))
+            print_btn.set_visibility(False)
+        with ui.card().classes(
+                "bili-card w-full p-6 min-h-[280px] no-shadow"):
+            summary_view = ui.markdown(
+                "💡 在上方输入 B 站视频链接，点击「开始处理」生成总结。"
+            ).classes("w-full")
 
     # ------------------------------------------------------------------
     # 交互
@@ -570,7 +593,8 @@ def main_page():
 
     def on_print():
         with state.lock:
-            title, summary, url, key_src = state.title, state.final_summary, state.url, state.task_key
+            title, summary, url, key_src = (
+                state.title, state.final_summary, state.url, state.task_key)
         if not summary:
             ui.notify("尚无总结内容可打印。", type="warning")
             return
@@ -583,10 +607,11 @@ def main_page():
         ui.open(f"/print?key={key}", new_tab=True)
 
     # ------------------------------------------------------------------
-    # 周期渲染：从 TaskState 快照刷新 UI（只在内容变化时更新元素）
+    # 周期渲染：从 TaskState 快照刷新 UI（内容变化时才更新元素）
     # ------------------------------------------------------------------
-    rendered = {"signature": None, "badge_cls": None,
-                "step_cls": [None, None, None, None], "running": None, "asr": None}
+    rendered = {"signature": None, "dot_cls": [None] * 4,
+                "line_done": [None] * 3, "phase": None, "running": None,
+                "asr": None, "cover": None}
 
     async def refresh():
         with state.lock:
@@ -594,12 +619,11 @@ def main_page():
                 "phase": state.phase, "step": state.step, "message": state.message,
                 "video_info": state.video_info, "cover_src": state.cover_src,
                 "timing": state.timing, "error": state.error,
-                "cache_hit": state.cache_hit, "cached_summary": state.cached_summary,
+                "cache_hit": state.cache_hit, "title": state.title,
                 "stream_text": state.stream_text, "final_summary": state.final_summary,
                 "sound_pending": state.sound_pending,
             }
 
-        # 完成提示音只播一次
         if snap["sound_pending"]:
             state.update(sound_pending=False)
             ui.run_javascript(_SOUND_JS)
@@ -607,118 +631,144 @@ def main_page():
         signature = (
             snap["phase"], snap["step"], snap["message"], snap["cover_src"],
             snap["timing"], snap["error"], snap["cache_hit"],
-            snap["stream_text"][-64:] if snap["stream_text"] else "",
-            len(snap["stream_text"] or ""), snap["final_summary"] is not None,
+            len(snap["stream_text"] or ""),
+            (snap["stream_text"] or "")[-32:],
+            snap["final_summary"] is not None,
         )
         streaming = snap["phase"] == "running" and snap["step"] == 4
-        if signature == rendered["signature"] and not streaming:
-            # 流式阶段每次都要刷新正文；其余状态无变化时跳过
-            _update_controls(snap)
-            return
-        rendered["signature"] = signature
-        _update_controls(snap)
+        if signature != rendered["signature"] or streaming:
+            rendered["signature"] = signature
+            _render_dynamic(snap)
+        _render_controls(snap)
 
-        # 状态徽标
-        badge_cls = {"done": "badge-success", "running": "badge-warning"}.get(
-            snap["phase"], "badge-idle")
-        status_badge.text = {"done": "✅ 处理完成！", "running": "⏳ 处理中..."}.get(
-            snap["phase"], "⏸️ 等待开始")
-        if rendered.get("badge_cls") != badge_cls:
-            status_badge.classes(
-                add=badge_cls,
-                remove=" ".join(c for c in ("badge-success", "badge-warning", "badge-idle") if c != badge_cls),
-            )
-            rendered["badge_cls"] = badge_cls
+    def _render_dynamic(snap):
+        # 阶段徽标 + 消息
+        phase_map = {
+            "idle": ("等待开始", "phase-idle"),
+            "running": ("处理中", "phase-running"),
+            "done": ("已完成", "phase-done"),
+            "cancelled": ("已取消", "phase-idle"),
+            "error": ("出错", "phase-error"),
+        }
+        chip_text, chip_cls = phase_map.get(snap["phase"], ("等待开始", "phase-idle"))
+        if rendered["phase"] != snap["phase"]:
+            phase_chip.text = chip_text
+            phase_chip.classes(
+                add=chip_cls,
+                remove=" ".join(c for c in
+                                ("phase-idle", "phase-running", "phase-done", "phase-error")
+                                if c != chip_cls))
+            rendered["phase"] = snap["phase"]
+        msg = (snap["error"] or snap["message"] or "").strip()
+        if phase_msg.text != msg:
+            phase_msg.text = msg
 
-        # 步骤卡片
-        for i, label in enumerate(step_labels):
+        # 步骤圆点与连线
+        for i in range(len(STEPS)):
             step_num = i + 1
             if snap["phase"] == "done":
-                cls = "step-completed"
+                cls = "step-dot-done"
             elif snap["cache_hit"] and step_num <= 3:
-                cls = "step-skipped"
-                if "已复用缓存" not in label.text:
-                    label.text += " ⏭️ 已复用缓存"
+                cls = "step-dot-skip"
             elif snap["step"] > step_num:
-                cls = "step-completed"
+                cls = "step-dot-done"
             elif snap["step"] == step_num and snap["phase"] == "running":
-                cls = "step-running"
+                cls = "step-dot-active"
             else:
-                cls = "step-pending"
-                label.text = label.text.split(" ⏭️")[0]
-            if rendered["step_cls"][i] != cls:
-                label.classes(
+                cls = "step-dot-pending"
+            if rendered["dot_cls"][i] != cls:
+                step_dots[i].classes(
                     add=cls,
                     remove=" ".join(
-                        c for c in ("step-pending", "step-running", "step-completed", "step-skipped")
-                        if c != cls),
-                )
-                rendered["step_cls"][i] = cls
+                        c for c in ("step-dot-pending", "step-dot-active",
+                                    "step-dot-done", "step-dot-skip")
+                        if c != cls))
+                rendered["dot_cls"][i] = cls
+                step_labels[i].classes(
+                    add="text-slate-600 font-medium" if cls == "step-dot-active"
+                    else "text-slate-400",
+                    remove="text-slate-600 font-medium" if cls != "step-dot-active"
+                    else "text-slate-400")
+            if i < len(step_lines):
+                line_done = snap["phase"] == "done" or snap["step"] > i + 1
+                if rendered["line_done"][i] != line_done:
+                    if line_done:
+                        step_lines[i].classes(add="step-line-done")
+                    else:
+                        step_lines[i].classes(remove="step-line-done")
+                    rendered["line_done"][i] = line_done
 
         # 耗时统计
         if snap["phase"] == "done" and snap["timing"]:
             timing_container.clear()
             with timing_container:
+                ui.separator().classes("mb-1")
                 for k, v in snap["timing"].items():
                     is_total = k == "总耗时"
-                    ui.label(f"{k}　　{v:.1f} 秒").classes(
-                        "timing-item total" if is_total else "timing-item")
+                    ui.label(f"{k}　{v:.1f} 秒").classes(
+                        "timing-row timing-row-total" if is_total else "timing-row")
             timing_container.set_visibility(True)
         else:
             timing_container.set_visibility(False)
 
-        # 视频信息卡片（封面由后台线程预先转好 base64）
+        # 视频信息卡片
         if snap["video_info"] is not None:
             info = snap["video_info"]
-            cover_img.set_source(snap["cover_src"] or info.get("pic", ""))
-            cover_img.set_visibility(True)
-            info_title.text = info.get("title", "")
-            info_owner.text = f"UP主: {info.get('owner', '')}"
-            info_title.set_visibility(True)
-            info_owner.set_visibility(True)
+            duration = info.get("duration") or 0
+            minutes, seconds = divmod(int(duration), 60)
+            cover = snap["cover_src"] or info.get("pic", "")
+            if rendered["cover"] != cover:
+                cover_img.set_source(cover)
+                rendered["cover"] = cover
+            info_title.text = snap.get("title") or info.get("title", "")
+            info_owner.text = f"UP主 · {info.get('owner', '')}"
+            info_meta.text = f"时长 {minutes}:{seconds:02d}"
+            info_card.set_visibility(True)
 
         # 总结正文
         if snap["phase"] == "running" and snap["step"] < 4:
             hint = {
-                1: "📥 正在获取视频详细信息...",
-                2: "💾 正在提取视频音频...",
-                3: snap["message"] or "🎵 正在进行语音转文字...",
-            }.get(snap["step"], "⏳ 正在努力处理中...")
-            summary_view.set_content(f"**{hint}**")
-        elif streaming:
+                1: "📄 正在获取视频信息…",
+                2: "⬇️ 正在下载音频…",
+                3: snap["message"] or "🎙️ 正在语音转文字…",
+            }.get(snap["step"], "⏳ 正在处理…")
+            summary_view.set_content(hint)
+        elif streaming_now(snap):
             summary_view.set_content(
                 snap["stream_text"] + " ▌" if snap["stream_text"]
-                else "🤖 正在组织语言并生成总结..."
-            )
+                else "✨ 正在生成总结…")
         elif snap["phase"] == "done":
             summary_view.set_content(snap["final_summary"])
         elif snap["phase"] == "cancelled":
-            summary_view.set_content(f"**{snap['message']}**")
+            summary_view.set_content(snap["message"] or "已取消。")
         elif snap["phase"] == "error":
-            summary_view.set_content(f"**❌ {snap['error']}**")
+            summary_view.set_content(f"❌ {snap['error']}")
         elif not snap["stream_text"]:
-            summary_view.set_content("💡 输入视频链接并点击「开始处理」以生成总结")
+            summary_view.set_content(
+                "💡 在上方输入 B 站视频链接，点击「开始处理」生成总结。")
 
         print_btn.set_visibility(snap["phase"] == "done")
 
-    def _update_controls(snap):
+    def streaming_now(snap):
+        return snap["phase"] == "running" and snap["step"] == 4
+
+    def _render_controls(snap):
         running = snap["phase"] == "running"
         if rendered["running"] != running:
             rendered["running"] = running
             start_btn.disable() if running else start_btn.enable()
             url_input.disable() if running else url_input.enable()
             cancel_btn.set_visibility(running)
-        # ASR 状态指示
         if _core is None:
-            asr_text = "⏳ 后端服务正在初始化…（首次访问需加载识别组件，请稍候）"
+            asr_text = "⏳ 后端初始化中…"
         else:
             status = _core.get_asr_model_status()
             if status == "loading":
-                asr_text = "⏳ 语音识别引擎正在后台加载中…（不影响视频下载）"
+                asr_text = "⏳ 识别引擎加载中（不阻塞下载）"
             elif status == "ready":
-                asr_text = "✅ 语音识别引擎已就绪"
+                asr_text = "✅ 识别引擎已就绪"
             else:
-                asr_text = "🔓 语音识别引擎待命（首次转写时会自动加载）"
+                asr_text = "🔓 识别引擎待命"
         if rendered["asr"] != asr_text:
             asr_badge.text = asr_text
             rendered["asr"] = asr_text
