@@ -474,6 +474,8 @@ def _run_pipeline(state: TaskState, url: str, enable_thinking: bool):
         }
         state.update(
             phase="done", step=5, final_summary=full_summary, timing=timing,
+            # 完成后清掉最后一条进度提示，改为展示总耗时
+            message=f"总耗时 {timing['总耗时']:.1f} 秒",
             sound_pending=True,
         )
     except TaskCancelled:
