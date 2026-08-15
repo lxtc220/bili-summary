@@ -270,8 +270,15 @@ _CUSTOM_CSS = """
         border: 1px solid #e8eaee;
         border-radius: 14px;
     }
-    /* 总结正文阅读体验：字号与行高接近旧版 summary-box */
-    .bili-card.summary-body { font-size: 15.5px; line-height: 1.78; }
+    /* 总结正文阅读体验：本机思源宋体正文 + 思源黑体标题，雅黑兜底 */
+    .bili-card.summary-body {
+        font-size: 16px; line-height: 1.85;
+        font-family: 'Noto Serif SC', 'Microsoft YaHei', serif !important;
+    }
+    .summary-body h1, .summary-body h2, .summary-body h3, .summary-body h4 {
+        font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif !important;
+        font-weight: 600;
+    }
     }
     .side-card {
         background: #ffffff;
