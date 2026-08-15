@@ -9,4 +9,5 @@ tqdm
 openai
 python-dotenv
 yt-dlp
-PySide6
+nicegui
+markdown
