@@ -258,6 +258,13 @@ _CUSTOM_CSS = """
                      'Microsoft YaHei', 'PingFang SC', sans-serif !important;
     }
     body { background: #f6f7f9; }
+    /* 标题沿用旧版视觉：B 站粉→蓝渐变字，加粗 */
+    .bili-title {
+        font-size: 1.5rem; font-weight: 800; letter-spacing: -0.3px;
+        background: linear-gradient(135deg, #fb7299 0%, #00aeec 100%);
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent; color: transparent;
+    }
     .bili-card {
         background: #ffffff;
         border: 1px solid #e8eaee;
@@ -503,7 +510,7 @@ def main_page():
     with ui.left_drawer(top_corner=True, bottom_corner=True) \
             .classes("w-[340px] px-4 py-5 gap-3"):
         with ui.column().classes("w-full gap-1 px-1 pb-1"):
-            ui.label("🎬 B站视频总结").classes("text-xl font-bold text-slate-800")
+            ui.label("🎬 B站视频总结").classes("bili-title")
             ui.label("粘贴链接，自动转录并总结").classes("text-xs text-slate-400")
 
         # 输入与操作
