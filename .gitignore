@@ -34,3 +34,19 @@ dist/
 # 输出文件
 *_summary.md
 *_transcription.txt
+
+# 运行日志
+*.log
+runtime_logs/
+
+# 本地基准测试产物与临时数据
+benchmark/*.json
+benchmark/*.jpg
+benchmark/*.jpeg
+benchmark/*.png
+benchmark/*.m4a
+benchmark/*.wav
+benchmark/vision.py
+
+# ZCode 会话文件
+.zcode/
