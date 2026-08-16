@@ -16,8 +16,8 @@
 
 ### 1. 克隆项目
 ```bash
-git clone https://github.com/lxtc220/bili-s.git
-cd bili-s
+git clone https://github.com/lxtc220/bili-summary.git
+cd bili-summary
 ```
 
 ### 2. 安装依赖
