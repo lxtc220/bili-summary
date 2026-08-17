@@ -44,8 +44,8 @@ if os.path.exists(dotenv_path):
 
 # AI 模型配置 (支持所有兼容 OpenAI 接口的服务商)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
-MODEL_ID = os.environ.get("MODEL_ID", "deepseek-v4-pro")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.avemujica.moe/v1")
+MODEL_ID = os.environ.get("MODEL_ID", "gpt-5.6-sol")
 
 # B站配置
 DEFAULT_BILI_USER_AGENT = os.environ.get(
@@ -166,12 +166,19 @@ def _extend_yt_dlp_command(cmd):
         "--add-header", f"Origin: {DEFAULT_BILI_ORIGIN}",
     ])
 
+    # 环境变量指定的文件 > 扫码登录落盘的默认文件（未登录则两者皆无）
     cookie_file = os.environ.get("BILIBILI_COOKIE_FILE")
+    if not (cookie_file and os.path.exists(cookie_file)) \
+            and os.path.exists(_default_bili_cookie_file()):
+        cookie_file = _default_bili_cookie_file()
     cookie_from_browser = os.environ.get("BILIBILI_COOKIES_FROM_BROWSER")
 
     if cookie_file:
         cmd.extend(["--cookies", cookie_file])
-    elif cookie_from_browser:
+    elif cookie_from_browser and _load_bili_credential() is not None:
+        # 浏览器 cookie 提取可用才加该参数：Edge/Chrome 运行中会锁住
+        # cookie 库导致提取失败，直接传给 yt-dlp 会让整个下载报错；
+        # 此时退回无 cookie 模式（与未配置时行为一致）
         cmd.extend(["--cookies-from-browser", cookie_from_browser])
 
     return cmd
@@ -402,6 +409,283 @@ def get_video_info(bvid):
         raise Exception(f"获取视频信息失败: {e}")
 
 
+# 模块级缓存：B站登录凭证（从 BILIBILI_COOKIE_FILE 解析；无则游客态）
+_bili_credential = None
+_bili_credential_loaded = False
+
+
+def _credential_from_browser():
+    """用 yt-dlp 的浏览器 cookie 提取能力拿B站登录态。
+
+    优先使用 web_ui 启动时 bili_cookies 的预热缓存（预热抢在启动脚本
+    自动打开浏览器之前，那时 cookie 库未被锁）；未预热时现场提取
+    （浏览器运行中大概率失败）。失败返回 None，绝不抛异常、绝不打印
+    cookie 值。
+    """
+    try:
+        from bili_cookies import warm_from_browser
+        values = warm_from_browser()
+        if not values:
+            return None
+        from bilibili_api import Credential
+        return Credential(
+            sessdata=values["SESSDATA"],
+            bili_jct=values.get("bili_jct"),
+            buvid3=values.get("buvid3"),
+            dedeuserid=values.get("DedeUserID"),
+        )
+    except Exception as e:
+        print(f"从浏览器提取B站 cookie 失败: {e}", file=sys.stderr)
+        return None
+
+
+def _load_bili_credential():
+    """加载B站登录态，优先级：BILIBILI_COOKIE_FILE > BILIBILI_COOKIES_FROM_BROWSER > 游客。
+
+    AI 字幕接口通常需要登录才返回字幕列表；拿不到登录态以游客态尝试
+    （查不到 AI 字幕，调用方需做好回退）。
+    """
+    global _bili_credential, _bili_credential_loaded
+    if _bili_credential_loaded:
+        return _bili_credential
+    _bili_credential_loaded = True
+
+    # 环境变量指定的文件 > 扫码登录落盘的默认文件 bili_cookies.txt
+    cookie_file = os.environ.get("BILIBILI_COOKIE_FILE")
+    if not (cookie_file and os.path.exists(cookie_file)):
+        default_file = _default_bili_cookie_file()
+        if os.path.exists(default_file):
+            cookie_file = default_file
+    if cookie_file and os.path.exists(cookie_file):
+        try:
+            wanted = {}
+            with open(cookie_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    # netscape 格式：域\t包含\t路径\t安全\t过期\t名称\t值
+                    # （注释行/失效行字段数不是 7，自然被跳过；#HttpOnly_ 前缀不影响）
+                    parts = line.strip().split("\t")
+                    if len(parts) != 7:
+                        continue
+                    name, value = parts[5], parts[6]
+                    if name in ("SESSDATA", "bili_jct", "buvid3", "DedeUserID") \
+                            and name not in wanted:
+                        wanted[name] = value
+            if "SESSDATA" in wanted:
+                from bilibili_api import Credential
+                _bili_credential = Credential(
+                    sessdata=wanted["SESSDATA"],
+                    bili_jct=wanted.get("bili_jct"),
+                    buvid3=wanted.get("buvid3"),
+                    dedeuserid=wanted.get("DedeUserID"),
+                )
+        except Exception as e:
+            print(f"解析 BILIBILI_COOKIE_FILE 失败: {e}", file=sys.stderr)
+
+    if _bili_credential is None:
+        browser = os.environ.get("BILIBILI_COOKIES_FROM_BROWSER")
+        if browser:
+            _bili_credential = _credential_from_browser()
+    return _bili_credential
+
+
+def _download_subtitle_body(url):
+    """下载字幕 JSON 并拼接为纯文本；失败返回 None。"""
+    import requests
+
+    response = requests.get(
+        url,
+        headers={
+            "Referer": DEFAULT_BILI_REFERER,
+            "User-Agent": DEFAULT_BILI_USER_AGENT,
+        },
+        timeout=15,
+    )
+    if response.status_code != 200:
+        return None
+    body = (response.json() or {}).get("body") or []
+    text = " ".join(
+        line.get("content", "").strip() for line in body if line.get("content")
+    ).strip()
+    return text or None
+
+
+def _fetch_subtitle_tracks_guest(aid, cid):
+    """游客态走老版 player/v2 接口查询字幕列表（新版 wbi 接口强制登录）。
+
+    AI 字幕登录后才可见，游客态最多拿到 UP 主上传的 CC 字幕。
+    """
+    import requests
+
+    resp = requests.get(
+        "https://api.bilibili.com/x/player/v2",
+        params={"aid": aid, "cid": cid},
+        headers={
+            "Referer": DEFAULT_BILI_REFERER,
+            "User-Agent": DEFAULT_BILI_USER_AGENT,
+        },
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        return []
+    data = resp.json() or {}
+    if data.get("code") != 0:
+        return []
+    return (((data.get("data") or {}).get("subtitle") or {})
+            .get("subtitles")) or []
+
+
+def fetch_subtitle_text(bvid, p=1, progress_callback=None):
+    """尝试读取B站字幕文字稿：UP主中文字幕优先，其次B站AI字幕。
+
+    拿不到（无字幕 / 未登录看不到AI字幕 / 网络失败）一律返回 None，
+    由调用方回退到"下载音频 + 本地转录"流程，绝不抛异常。
+    """
+    try:
+        # 与 get_video_info 相同的懒加载模式（funasr 已在模块顶部先加载）
+        try:
+            from bilibili_api.utils.network import select_client
+            select_client("httpx")
+        except Exception:
+            pass
+        from bilibili_api import video, sync
+
+        credential = _load_bili_credential()
+        v = video.Video(bvid=bvid, credential=credential)
+        info = sync(v.get_info()) or {}
+        pages = info.get("pages", [])
+        if not (1 <= p <= len(pages)):
+            return None
+        cid = pages[p - 1]["cid"]
+
+        if progress_callback:
+            progress_callback("正在查询B站字幕...")
+        if credential is not None:
+            # 登录态：官方 player 接口，可见 AI 字幕与 UP 主字幕
+            tracks = ((sync(v.get_subtitle(cid=cid)) or {})
+                      .get("subtitles", []) or [])
+        else:
+            # 游客态：老版接口碰运气（最多拿到 UP 主上传的 CC 字幕）
+            tracks = _fetch_subtitle_tracks_guest(info.get("aid"), cid)
+
+        def track_rank(track):
+            lan = str(track.get("lan", ""))
+            if lan == "zh-CN":
+                return 0            # UP主上传的中文字幕
+            if lan.startswith("ai-zh") or track.get("ai_type") == 1:
+                return 1            # B站AI中文字幕
+            if "zh" in lan:
+                return 2            # 其他中文轨道
+            return 3
+
+        tracks.sort(key=track_rank)
+        for track in tracks:
+            url = str(track.get("subtitle_url") or "")
+            if not url:
+                continue
+            if url.startswith("//"):
+                url = "https:" + url
+            text = _download_subtitle_body(url)
+            if text:
+                return text
+        return None
+    except Exception as e:
+        print(f"获取B站字幕失败（回退本地转录）: {e}", file=sys.stderr)
+        return None
+
+
+def _default_bili_cookie_file():
+    """扫码登录写入的默认 cookie 文件（项目根目录 bili_cookies.txt）。
+
+    不依赖 .env 配置即可生效：_load_bili_credential 与 yt-dlp 下载
+    都会在环境变量未配置时回退到这个文件。
+    """
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "bili_cookies.txt")
+
+
+def generate_bili_login_qrcode():
+    """生成B站扫码登录二维码，返回 (qrcode_key, 扫码URL)。"""
+    import requests
+
+    resp = requests.get(
+        "https://passport.bilibili.com/x/passport-login/web/qrcode/generate",
+        headers={"User-Agent": DEFAULT_BILI_USER_AGENT,
+                 "Referer": "https://www.bilibili.com/"},
+        timeout=10)
+    data = resp.json() or {}
+    if data.get("code") != 0:
+        raise Exception(f"获取登录二维码失败: {data.get('message', '未知错误')}")
+    d = data.get("data") or {}
+    if not d.get("qrcode_key") or not d.get("url"):
+        raise Exception("获取登录二维码失败：返回数据不完整")
+    return d["qrcode_key"], d["url"]
+
+
+def _save_bili_cookies_file(values):
+    """把登录凭证写为 netscape cookie 文件（凭证加载与 yt-dlp 共用）。"""
+    path = _default_bili_cookie_file()
+    lines = ["# Netscape HTTP Cookie File（B站视频总结工具扫码登录生成）"]
+    for name in ("SESSDATA", "bili_jct", "buvid3", "DedeUserID"):
+        if values.get(name):
+            lines.append(f".bilibili.com\tTRUE\t/\tTRUE\t0\t{name}\t{values[name]}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+def poll_bili_login_qrcode(qrcode_key):
+    """轮询扫码状态；确认成功即落盘 cookie 并刷新进程内登录态。
+
+    返回 {"status": waiting/scanned/expired/confirmed, "path": 落盘路径}。
+    网络异常直接上抛，由调用方给出中文提示。
+    """
+    import requests
+
+    resp = requests.get(
+        "https://passport.bilibili.com/x/passport-login/web/qrcode/poll",
+        params={"qrcode_key": qrcode_key},
+        headers={"User-Agent": DEFAULT_BILI_USER_AGENT,
+                 "Referer": "https://www.bilibili.com/"},
+        timeout=10)
+    body = resp.json() or {}
+    inner = (body.get("data") or {}).get("code", -1)
+    if inner != 0:
+        return {"status": {86101: "waiting", 86090: "scanned",
+                           86038: "expired"}.get(inner, "unknown")}
+
+    # 确认成功：凭证在响应 cookie 里，部分字段也可能只出现在回跳 URL 中
+    values = {}
+    for cookie in resp.cookies:
+        if cookie.name in ("SESSDATA", "bili_jct", "buvid3", "DedeUserID") \
+                and cookie.value:
+            values.setdefault(cookie.name, cookie.value)
+    from urllib.parse import urlparse, parse_qs
+    for key, vals in parse_qs(urlparse(
+            (body.get("data") or {}).get("url", "")).query).items():
+        if key in ("SESSDATA", "bili_jct", "buvid3", "DedeUserID") and vals:
+            values.setdefault(key, vals[0])
+    if "SESSDATA" not in values:
+        raise Exception("登录成功但未解析到登录凭证，请刷新二维码重试")
+
+    path = _save_bili_cookies_file(values)
+    # 进程内立即生效：无需重启，当前服务的 AI 字幕 / 带 cookie 下载
+    # 马上可用（_load_bili_credential 之后直接返回该实例）
+    global _bili_credential
+    from bilibili_api import Credential
+    _bili_credential = Credential(
+        sessdata=values["SESSDATA"],
+        bili_jct=values.get("bili_jct"),
+        buvid3=values.get("buvid3"),
+        dedeuserid=values.get("DedeUserID"),
+    )
+    return {"status": "confirmed", "path": path}
+
+
+def bili_login_ready():
+    """B站登录态是否可用（决定 AI 字幕与带 cookie 下载是否启用）。"""
+    return _load_bili_credential() is not None
+
+
 # 模块级：下载互斥锁，按任务键 {bvid}_p{page} 区分。
 # Streamlit 的 rerun（重复点击按钮 / 刷新页面 / autorefresh）可能让
 # download_audio 被并发调用，多个 yt-dlp 写同一输出文件会互相破坏
@@ -515,31 +799,78 @@ def transcribe_audio(audio_path, progress_callback=None):
         raise Exception(f"音频转文字失败: {e}")
 
 
-def summarize_content(title, text, progress_callback=None, enable_thinking=False):
+def _build_system_prompt(word_limit):
+    """构建总结系统提示词；word_limit 为正整数时附加篇幅要求，None/0 不限制。"""
+    length_req = f"，总结篇幅控制在{int(word_limit)}字以内" if word_limit else ""
+    return (
+        "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，"
+        "对这个视频进行总结，格式需要使用简单的markdown格式，"
+        f"需要保证清晰易读{length_req}。"
+        "请注意：文字内容是通过视频音频转录来的，所以有可能有问题，"
+        "如果遇到拼写偏差，请自行修正，并不要在总结内容中体现出来。"
+    )
+
+
+def _build_thinking_extra_body(model_id, enable_thinking):
+    """思考深度控制按模型家族区分（都放 extra_body，兼容旧版 openai SDK）：
+      - GPT 系列（gpt-*）：顶层 reasoning_effort（none/low/medium/high/xhigh/max），
+        勾选深度思考映射 high，关闭映射 low；
+      - Claude 系列（claude-*）：同样走 reasoning_effort，网关会映射为
+        Anthropic 扩展思考（实测 high 会返回 reasoning_content，DeepSeek 式
+        thinking 字段虽不报错但不生效）；
+      - DeepSeek 系列：thinking 嵌套对象（OpenAI 标准 schema 无此字段），
+        V4 默认开思考，必须显式传 disabled 才能关闭。
+    """
+    lowered = model_id.lower()
+    if lowered.startswith(("gpt", "claude")):
+        return {"reasoning_effort": "high" if enable_thinking else "low"}
+    return {"thinking": {"type": "enabled" if enable_thinking else "disabled"}}
+
+
+def list_available_models(base_url=None, api_key=None):
+    """查询 OpenAI 兼容服务商的可用模型列表（设置弹窗下拉框用）。
+
+    base_url / api_key 不传时用 .env 全局配置；查询失败时抛异常，
+    由调用方回退到仅当前模型。
+    """
+    effective_key = api_key or LLM_API_KEY
+    if not effective_key:
+        raise ValueError("未配置 API Key。")
+
+    from openai import OpenAI
+    client = OpenAI(base_url=base_url or LLM_BASE_URL, api_key=effective_key)
+    response = client.models.list()
+    return sorted(model.id for model in response.data)
+
+
+def summarize_content(title, text, progress_callback=None, enable_thinking=False,
+                      model_id=None, word_limit=800, base_url=None, api_key=None):
     """使用 AI 模型总结内容（非流式）。
 
-    enable_thinking: 是否启用 DeepSeek 思考模式（思维链推理）。默认关闭。
+    enable_thinking: 是否启用深度思考（思维链推理）。默认关闭。
         - False: 关闭思考，响应快
         - True:  开启思考，回答更深入但更慢（思维链内容 reasoning_content 不返回/丢弃）
+    model_id: 本次调用使用的模型 ID；None 用全局 MODEL_ID。
+    word_limit: 总结篇幅上限（字）；None 或 0 表示不限制。
+    base_url / api_key: 本次调用的服务商地址与密钥；None 用 .env 全局配置。
     """
-    if not LLM_API_KEY:
-        raise ValueError("请先在 .env 或环境变量中配置 LLM_API_KEY。")
+    effective_key = api_key or LLM_API_KEY
+    if not effective_key:
+        raise ValueError("请先配置 API Key（设置弹窗或 .env）。")
 
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
 
+    effective_model = model_id or MODEL_ID
     from openai import OpenAI
-    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    client = OpenAI(base_url=base_url or LLM_BASE_URL, api_key=effective_key)
 
-    # DeepSeek 思考模式通过 extra_body 传递（OpenAI 标准 schema 无此字段）。
-    # 官方格式为 {"thinking": {"type": "enabled"/"disabled"}}，注意 thinking 是嵌套对象。
-    # V4 系列默认开启思考，必须显式传 type=disabled 才能关闭。
-    extra_body = {"thinking": {"type": "enabled" if enable_thinking else "disabled"}}
+    extra_body = _build_thinking_extra_body(effective_model, enable_thinking)
 
     try:
         response = client.chat.completions.create(
-            model=MODEL_ID,
+            model=effective_model,
             messages=[
-                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。请注意：文字内容是通过视频音频转录来的，所以有可能有问题，如果遇到拼写偏差，请自行修正，并不要在总结内容中体现出来。"},
+                {"role": "system", "content": _build_system_prompt(word_limit)},
                 {"role": "user", "content": f"视频标题：{title}\n\n文字稿：{text}"}
             ],
             stream=False,
@@ -550,28 +881,34 @@ def summarize_content(title, text, progress_callback=None, enable_thinking=False
         raise LLMServiceError(_format_llm_error(e))
 
 
-def summarize_content_stream(title, text, progress_callback=None, enable_thinking=False):
+def summarize_content_stream(title, text, progress_callback=None, enable_thinking=False,
+                             model_id=None, word_limit=800, base_url=None, api_key=None):
     """使用 AI 模型总结内容（流式输出）。
 
-    enable_thinking: 是否启用 DeepSeek 思考模式。开启后流式响应里会先吐
+    enable_thinking: 是否启用深度思考。开启后流式响应里会先吐
         reasoning_content（思维链过程），再吐 content（最终总结）。这里只
         透传 content，思维链过程不展示（如需展示可读取 delta.reasoning_content）。
+    model_id: 本次调用使用的模型 ID；None 用全局 MODEL_ID。
+    word_limit: 总结篇幅上限（字）；None 或 0 表示不限制。
+    base_url / api_key: 本次调用的服务商地址与密钥；None 用 .env 全局配置。
     """
-    if not LLM_API_KEY:
-        raise ValueError("请先在 .env 或环境变量中配置 LLM_API_KEY。")
+    effective_key = api_key or LLM_API_KEY
+    if not effective_key:
+        raise ValueError("请先配置 API Key（设置弹窗或 .env）。")
 
     if progress_callback: progress_callback("正在调用AI模型进行总结...")
 
+    effective_model = model_id or MODEL_ID
     from openai import OpenAI
-    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY)
+    client = OpenAI(base_url=base_url or LLM_BASE_URL, api_key=effective_key)
 
-    extra_body = {"thinking": {"type": "enabled" if enable_thinking else "disabled"}}
+    extra_body = _build_thinking_extra_body(effective_model, enable_thinking)
 
     try:
         response = client.chat.completions.create(
-            model=MODEL_ID,
+            model=effective_model,
             messages=[
-                {"role": "system", "content": "你是一个专业的视频内容总结助手，请根据提供的视频标题和文字稿，对这个视频进行总结，格式需要使用简单的markdown格式，需要保证清晰易读。请注意：文字内容是通过视频音频转录来的，所以有可能有问题，如果遇到拼写偏差，请自行修正，并不要在总结内容中体现出来。"},
+                {"role": "system", "content": _build_system_prompt(word_limit)},
                 {"role": "user", "content": f"视频标题：{title}\n\n文字稿：{text}"}
             ],
             stream=True,
@@ -584,6 +921,58 @@ def summarize_content_stream(title, text, progress_callback=None, enable_thinkin
                 yield chunk.choices[0].delta.content
     except Exception as e:
         raise LLMServiceError(_format_llm_error(e))
+
+
+_LIST_LINE_RE = re.compile(r"^\s*(?:[-*+]|\d{1,3}[.)])\s+")
+
+
+def _normalize_list_blank_lines(md):
+    """列表与相邻段落之间补空行（仅动空白，不改任何文字）。
+
+    模型偶尔把列表紧跟在引导句后（无空行），markdown2 遵循老式
+    markdown 规范会把「- 」按字面文本留在段落里，页面上就是一串
+    减号。补空行后列表/段落各自成块，渲染恢复正常。代码块内容、
+    嵌套列表的缩进续行不受影响。
+    """
+    lines = md.split("\n")
+    out = []
+    in_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence or not stripped or line[0].isspace():
+            out.append(line)  # 代码块内/空行/缩进续行（嵌套列表、条目续文）
+            continue
+        prev = next((l for l in reversed(out) if l.strip()), "")
+        if not prev or prev.startswith((">", "|", "#", "```")):
+            out.append(line)
+            continue
+        is_list = bool(_LIST_LINE_RE.match(line))
+        prev_is_list = bool(_LIST_LINE_RE.match(prev))
+        # 只在两行紧邻（前一行非空）时补空行，已是空行分隔的不再重复插
+        if out[-1].strip() and is_list != prev_is_list:
+            out.append("")  # 列表 ↔ 段落 交界处补空行
+        out.append(line)
+    return "\n".join(out)
+
+
+def format_summary_markdown(title, summary_md, video_url):
+    """统一总结最终版式：正文（含标题）完全由模型输出 + 视频链接收尾。
+
+    网页阅读区、导出长图、落盘文件三处共用。程序不添加、不纠正标题
+    （title 参数仅为保持调用签名兼容）；结尾拼接分隔线与视频链接，
+    并对正文做空行规范化（列表与段落交界补空行，仅空白变化）。
+    """
+    body = _normalize_list_blank_lines((summary_md or "").strip())
+    parts = []
+    if body:
+        parts.append(body)
+    if video_url:
+        parts.append(f"---\n\n视频链接：[{video_url}]({video_url})")
+    return "\n\n".join(parts)
 
 
 def save_transcription(bvid, title, text, p=1):
@@ -658,7 +1047,7 @@ def save_results(bvid, title, text, summary, p=1):
 
     md_path = os.path.join(output_dir, f"{cache_key}_summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
-        f.write(f"# {title}\n\n## 视频链接\n{video_url}\n\n## 内容总结\n{summary}")
+        f.write(format_summary_markdown(title, summary, video_url))
 
     # 限制缓存目录大小为 30MB
     limit_directory_size(intermediate_dir, 30 * 1024 * 1024)

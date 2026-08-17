@@ -31,13 +31,15 @@ B站视频总结工具（Bili-summary）：yt-dlp 下载 B 站视频音频 → F
 4. **ASR 单例**：`_asr_model_instance` 是模块级全局（双检锁），进程内只加载一次，所有页面/客户端共享。UI 侧的任务状态（TaskState）可以每页一份，模型实例绝不能。状态查询用 `get_asr_model_status()`（ready/loading/idle）。
 5. **DeepSeek 思考模式**：V4 默认开思考，必须显式传 `extra_body={"thinking": {"type": "enabled"/"disabled"}}`（嵌套 dict，OpenAI 标准 schema 没有此字段）。流式响应只透传 `delta.content`，丢弃 `reasoning_content`。
 6. **转录缓存格式自洽**：`intermediate_files/{bvid}_p{p}_transcription.txt` 固定格式为 `视频标题: ...\n视频链接: ...\n\n转录内容:\n\n{text}`，`save_transcription` / `load_cached_transcription` / `save_results` 三者必须保持一致；缓存键统一 `{bvid}_p{p}`。
-7. **B 站 412**：下载失败先提示配置 cookies（BILIBILI_COOKIE_FILE 或 BILIBILI_COOKIES_FROM_BROWSER）；yt-dlp 命令已带分块下载/重试参数，勿删。
-8. **自动退出**：web_ui.py 用 NiceGUI 的 `app.on_connect/on_disconnect` 维护连接计数，约 10 分钟无浏览器连接时 `os._exit(0)`；api.py 有独立心跳（30s）。测试时注意。断线时页面会显示中文覆盖层（重新加载按钮 + 每 3 秒自动探测恢复），依赖 NiceGUI 的 `window.onNiceGuiDisconnect/onNiceGuiConnect` JS 钩子。
+7. **B 站 412**：下载失败先提示配置 cookies（BILIBILI_COOKIE_FILE 或 BILIBILI_COOKIES_FROM_BROWSER）；yt-dlp 命令已带分块下载/重试参数，勿删。另：流水线在下载前会先尝试读B站字幕（`fetch_subtitle_text`，UP主中文 > AI中文 > 其他中文），命中即跳过下载+转录并把字幕稿当转录稿落缓存；拿不到一律返回 None 回退本地转录，勿改成抛异常。**AI 字幕必须登录**：登录态优先级 = BILIBILI_COOKIE_FILE（env 文件）> **扫码登录落盘的 `bili_cookies.txt`（`generate/poll_bili_login_qrcode`，passport 二维码接口，扫码成功后进程内即时生效，勿破坏）** > BILIBILI_COOKIES_FROM_BROWSER（`bili_cookies.py` 启动预热 + yt-dlp 提取）> 游客态老版 `player/v2` 接口。**本机实测（2026-08）：Edge 的 App-Bound 加密导致 yt-dlp "Failed to decrypt with DPAPI"（issue #10927），浏览器提取在此机器不可用**，首选扫码登录。提取失败时字幕退回游客态、下载自动退回无 cookie 模式（`_extend_yt_dlp_command` 里提取成功才加 `--cookies-from-browser`，勿删此防护）。`bili_cookies.txt` 在 .gitignore 里（含 SESSDATA 严禁提交）。字幕获取的新增 bilibili_api import 同样是懒加载，保持 funasr 先导入的顺序。
+8. **自动退出**：web_ui.py 用 NiceGUI 的 `app.on_connect/on_disconnect` 维护连接计数，约 10 分钟无浏览器连接时 `os._exit(0)`；api.py 有独立心跳（30s）。测试时注意。断线时页面会显示中文覆盖层（重新加载按钮 + 每 3 秒自动探测恢复），依赖 NiceGUI 的 `window.onNiceGuiDisconnect/onNiceGuiConnect` JS 钩子。另：`_start_asr_preload()` 在 `__main__` 进程启动时即调用（不等首个页面连接），让 funasr/torch 的重型导入（约 10-30 秒）尽早开始；导入窗口内点「开始处理」会短暂阻塞在 `_get_core()` 的 `_backend_lock` 上，流水线已给出「后端初始化中」中文提示——不要为了"解耦"把 funasr 改成懒加载，会破坏陷阱 1 的导入顺序。
 9. **无控制台启动必须重定向输出**：pythonw 在零句柄环境（VBS 隐藏启动）下 `sys.stdout/stderr` 为 None，NiceGUI/uvicorn 启动写日志会直接崩溃（表现为双击后毫无反应）。`后台启动.vbs` 通过 `cmd /c "... > runtime_logs\web_ui.log 2>&1"` 提供真实文件句柄，不要去掉重定向。另：`ui.timer` 回调必须 async，同步回调会阻断事件分发。
+10. **导出图片 = 无头浏览器真截图**：`/export_png` 用 Playwright 驱动系统 Edge（channel=msedge，依次回退 chrome/自带 chromium）截取 `/export/{key}` 渲染页，PNG 以附件下载（中文文件名用 RFC 5987 编码）。渲染页与主页阅读区共用 `_CUSTOM_CSS` + `ui.markdown`，改阅读区样式两处要同步。网页 JS 无权截取自身像素，html2canvas 一类"重绘"方案会丢列表圆点等细节，勿改回；playwright 只需 `pip install playwright`，**无需** `playwright install` 下载浏览器。注意 `_export_sources` 只在浏览器连接主页后才注册（无 websocket 的裸 GET 不触发 ui.timer）。
 
 ## 约定
 
 - `progress_callback(message)` 贯穿下载→转录→总结全链路，UI 进度靠它驱动，新功能不要绕过。
+- 总结最终版式：正文（含标题）完全由模型输出，程序不添加、不纠正标题；`format_summary_markdown` 仅在结尾拼接 `---` + 视频链接。网页阅读区、打印页、导出长图、落盘 md 文件四处共用，勿各自拼装。
 - 用户可见错误信息用中文、单行，直接展示给用户（如 `LLMServiceError`、`_format_llm_error` 对 401/404 有专门提示）。
 - 路径用相对项目根目录的字符串（`intermediate_files`、`final_outputs`），与既有代码一致。
 - Windows 上调用子进程（yt-dlp）时用 `STARTUPINFO` 隐藏黑框，见 `download_audio`。

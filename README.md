@@ -5,10 +5,10 @@
 ## 🚀 功能特性
 
 - **网页界面**：基于 NiceGUI 的本地 Web UI（B 站粉主题，端口 8080），启动后自动打开浏览器，左右分栏布局，总结正文照搬 GitHub Markdown 排版。
-- **本地转录**：SenseVoiceSmall 语音识别模型本地运行，首次使用自动从 ModelScope 下载；程序启动即在后台预热，进程内只加载一次，多页面共享。
+- **本地转录**：SenseVoiceSmall 语音识别模型本地运行，首次使用自动从 ModelScope 下载；程序启动即在后台预热，进程内只加载一次，多页面共享。处理时优先读取B站字幕（AI 字幕/UP主 CC 字幕，AI 字幕需配置登录 cookie），无字幕自动回退本地转录。
 - **智能总结**：支持所有兼容 OpenAI 接口的服务商（DeepSeek / 魔搭 / 硅基流动等），流式生成，需要自行配置 API 密钥。
 - **转录缓存**：同一分 P 的转录结果自动缓存，重复处理同一视频时直接复用；临时文件目录限容 30MB 自动清理。
-- **实时反馈**：下载 → 转录 → 总结全链路进度实时展示，支持中途取消任务、A4 排版打印总结。
+- **实时反馈**：下载 → 转录 → 总结全链路进度实时展示，支持中途取消任务、A4 排版打印总结、一键导出长图（无头浏览器真实截图，排版与页面所见完全一致）。
 - **自动退出**：约 10 分钟无浏览器连接自动退出后台进程；页面断线时显示重连覆盖层，服务恢复后一键重载。
 - **内容理解**：仅分析音频内容，不支持视频画面识别，对绝大多数口播类视频已经够用。
 
@@ -40,12 +40,14 @@ cp .env.example .env
 ```
 默认使用 [DeepSeek 官方 API](https://platform.deepseek.com/)（`https://api.deepseek.com`，模型 `deepseek-v4-flash`）。如需换用其他兼容 OpenAI 接口的服务商，同时修改 `LLM_BASE_URL` 和 `MODEL_ID` 即可，`.env.example` 中附有常用服务商示例。
 
-如果下载 B 站音频时收到 `412 Precondition Failed`，建议补充这些可选配置：
+如果下载 B 站音频时收到 `412 Precondition Failed`，或想让"读取B站AI字幕"功能生效，推荐直接在页面左侧点 **「扫码登录」**（手机B站 App 扫码，凭证自动保存到本机 `bili_cookies.txt`，立即生效）。也可以手动配置：
 ```bash
 BILIBILI_COOKIE_FILE=C:\path\to\bilibili_cookies.txt
-# 或者
-BILIBILI_COOKIES_FROM_BROWSER=chrome
+# 或者：直接读浏览器 cookie（需浏览器完全退出后启动本程序；
+# 注意新版 Edge/Chrome 的加密可能导致提取失败，失败时自动回退，不影响使用）
+BILIBILI_COOKIES_FROM_BROWSER=edge
 ```
+说明：配置任一 cookie 后，处理时会优先读取B站字幕（AI 字幕/UP主 CC 字幕）跳过下载与转录；未配置或提取失败时自动回退本地转录，下载回退无 cookie 模式。
 
 ## 📖 使用方法
 

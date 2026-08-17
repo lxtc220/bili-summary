@@ -16,6 +16,8 @@ __pycache__/
 
 # 环境
 .env
+ui_settings.json
+thinking_state.json
 venv/
 
 # IDE
@@ -50,3 +52,6 @@ benchmark/vision.py
 
 # ZCode 会话文件
 .zcode/
+
+# B站扫码登录凭证（含 SESSDATA，严禁提交）
+bili_cookies.txt

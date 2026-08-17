@@ -11,3 +11,5 @@ python-dotenv
 yt-dlp
 nicegui
 markdown
+playwright
+qrcode
