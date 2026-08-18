@@ -27,10 +27,10 @@ from bili_core import (
     extract_bvid_and_p,
     get_video_info,
     download_audio,
-    transcribe_audio,
     summarize_content_stream,
     save_results,
 )
+from asr_worker import get_asr_worker
 
 # 数据模型
 class VideoURL(BaseModel):
@@ -88,7 +88,13 @@ async def lifespan(app: FastAPI):
     heartbeat_thread = threading.Thread(target=check_heartbeat, daemon=True)
     heartbeat_thread.start()
     print(f"[系统] 心跳检测已启动，超时时间: {HEARTBEAT_TIMEOUT}秒")
-    
+
+    # 拉起 ASR 工作子进程并预加载模型（非阻塞，加载进度不接口化）
+    try:
+        get_asr_worker().preload()
+    except Exception as e:
+        print(f"[系统] ASR 工作进程预热失败（首次转录时会自动重试）: {e}")
+
     yield
     # 关闭时清理
     print("[系统] 服务正在关闭...")
@@ -232,7 +238,8 @@ async def process_video_stream(url: str, p: int) -> AsyncGenerator[str, None]:
         
         def run_transcription():
             try:
-                result = transcribe_audio(audio_path, None)
+                # 转录走 ASR 工作子进程，本进程不加载 funasr/torch
+                result = get_asr_worker().transcribe(audio_path)
                 transcription_result[0] = result
             except Exception as e:
                 transcription_error[0] = str(e)

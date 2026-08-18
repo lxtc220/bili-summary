@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 
+from asr_worker import get_asr_worker
 from dotenv import load_dotenv
 from nicegui import app, run, ui
 from starlette.requests import Request
@@ -43,7 +44,8 @@ BILI_BLUE = "#00aeec"
 
 
 # ---------------------------------------------------------------------------
-# bili_core 懒加载（首屏渲染不等待 funasr/torch 等重型依赖）
+# bili_core 懒加载（funasr/torch 已隔离进 asr_worker 子进程，本进程
+# 导入 bili_core 只剩轻依赖，秒级完成；机制保留作保护）
 # ---------------------------------------------------------------------------
 
 _core = None
@@ -64,10 +66,11 @@ def _get_core():
 
 
 def _start_asr_preload():
-    """进程内只启动一次的后台预热线程：先 import bili_core，再预加载 ASR。
+    """进程内只启动一次：拉起 ASR 工作子进程并预加载模型。
 
-    模型加载成功与否不影响处理流程——若加载未完成，处理流程到转录步骤时
-    transcribe_audio 内部会阻塞等待（bili_core 的双检锁保证只加载一次）。
+    主进程从此不再 import funasr/torch——模型加载全部发生在 asr_worker
+    子进程里。加载成功与否不影响处理流程：流水线到转录步骤时会等待
+    worker 就绪；worker 意外退出会在下次转录时自动重启自愈。
     """
     global _asr_preload_started
     with _asr_preload_lock:
@@ -75,17 +78,13 @@ def _start_asr_preload():
             return
         _asr_preload_started = True
 
-    def worker():
+    def boot():
         try:
-            _get_core()
+            get_asr_worker().preload()
         except Exception as e:
-            print(f"bili_core 导入失败: {e}", file=sys.stderr)
-        try:
-            _get_core().preload_asr_model()
-        except Exception as e:
-            print(f"ASR 预加载失败（首次转写时会自动重试）: {e}", file=sys.stderr)
+            print(f"ASR 工作进程启动失败（首次转写时会自动重试）: {e}", file=sys.stderr)
 
-    threading.Thread(target=worker, daemon=True).start()
+    threading.Thread(target=boot, daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -689,7 +688,7 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
     """
     try:
         state.update(phase="running", step=1,
-                     message="后端初始化中（首次启动约需半分钟）…",
+                     message="正在启动后端…",
                      error="", started_at=time.time())
 
         def progress(msg):
@@ -698,8 +697,8 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
                 raise TaskCancelled()
             state.update(message=msg)
 
-        # 此处可能阻塞在 bili_core 导入锁上（启动预热正在导入 funasr
-        # 等重型依赖）——上面已给出中文提示，导入完成即继续
+        # bili_core 已无重型依赖（funasr 隔离在子进程），导入秒级完成；
+        # 双检锁保留作保护，极端情况下也只阻塞一瞬间
         core = _get_core()
         bvid, p = core.extract_bvid_and_p(url)
         if not bvid:
@@ -762,11 +761,13 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
                 title, audio_path = core.download_audio(bvid, p, progress)
                 state.update(title=title, download_time=time.time() - started)
 
-                # 第 3 步：等待模型（预热未完成时）并转录
+                # 第 3 步：等待 ASR 工作进程（预热未完成时）并转录。
+                # 转录在 asr_worker 子进程执行，主进程全程不加载 torch
                 state.update(step=3, message="正在准备语音识别...")
-                if core.get_asr_model_status() == "loading":
+                worker = get_asr_worker()
+                if worker.status() in ("starting", "loading"):
                     wait_start = time.time()
-                    while core.get_asr_model_status() == "loading":
+                    while worker.status() in ("starting", "loading"):
                         if state.cancel_event.is_set():
                             raise TaskCancelled()
                         elapsed = int(time.time() - wait_start)
@@ -779,7 +780,7 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
                         time.sleep(1)
 
                 started = time.time()
-                text = core.transcribe_audio(audio_path, progress)
+                text = worker.transcribe(audio_path, progress)
                 state.update(transcribe_time=time.time() - started)
                 transcript = text
 
@@ -1305,11 +1306,13 @@ def main_page():
         if _core is None:
             asr_text = "⏳ 后端初始化中…"
         else:
-            status = _core.get_asr_model_status()
-            if status == "loading":
+            status = get_asr_worker().status()
+            if status in ("starting", "loading"):
                 asr_text = "⏳ 识别引擎加载中（不阻塞下载）"
             elif status == "ready":
                 asr_text = ""  # 就绪后不再占侧栏，只在异常状态提示
+            elif status in ("error", "dead"):
+                asr_text = "⚠️ 识别引擎异常，下次转写时自动重启"
             else:
                 asr_text = "🔓 识别引擎待命"
         if rendered["asr"] != asr_text:

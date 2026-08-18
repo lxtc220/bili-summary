@@ -21,18 +21,17 @@ ffmpeg_path = str(PROJECT_ROOT / "ffmpeg")
 if ffmpeg_path not in os.environ["PATH"]:
     os.environ["PATH"] = f"{ffmpeg_path};{os.environ['PATH']}"
 
-# 重要：funasr 必须在 bilibili_api / modelscope 之前 import。
-# 在 Windows 上，若 bilibili_api(curl_cffi) 和 modelscope 先加载，
-# 会改变某些共享 native DLL 的状态，导致后续 funasr 内部 torch.jit
-# 编译 bicif_paraformer/cif_predictor.py 时触发 access violation（段错误）。
-# 因此 funasr 在本模块顶层最先 import；bilibili_api / modelscope / openai
-# 这些较重且启动非必需的依赖改为在各自函数内懒加载（首次调用时 funasr
-# 必已就位，顺序约束不变），避免 web_ui / api 入口 import 本模块时被拖慢。
-try:
-    import funasr  # noqa: F401
-except Exception:
-    # 模块缺失等情况下不阻塞 bili_core 其他功能（如 LLM 总结）
-    pass
+# 重要（2026-08 起改为子进程隔离）：funasr/torch 不再由本模块顶层导入，
+# 只允许在 asr_worker.py 拉起的转录子进程里加载——该子进程永不 import
+# bilibili_api / modelscope，"funasr 先于 curl_cffi/modelscope"的导入顺序
+# 约束在隔离进程内天然满足。主进程（web_ui / api）一律通过
+# asr_worker.get_asr_worker() 请求转录，不要在主进程直接调用
+# transcribe_audio / preload_asr_model（会把 torch 拉进主进程，破坏隔离）。
+# 历史背景：Windows 上若 bilibili_api(curl_cffi) 和 modelscope 先于 funasr
+# 加载，会改变共享 native DLL 状态，导致 funasr 内部 torch.jit 编译
+# bicif_paraformer/cif_predictor.py 触发 access violation（段错误）；
+# 进程隔离对该问题根治（2026-08 本机实测当前版本已不复现，隔离保留作保险，
+# 见 benchmark/verify_subprocess_isolation.py）。
 
 import json
 from dotenv import load_dotenv
