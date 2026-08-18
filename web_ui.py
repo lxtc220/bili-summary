@@ -528,6 +528,9 @@ SETTINGS_PATH = os.path.join(_PROJECT_ROOT, "ui_settings.json")
 _DEFAULT_SETTINGS = {
     "word_limit": 800,  # 总结字数上限；None 表示不限制
     "thinking": True,
+    # 文字稿来源：auto=字幕优先回退本地转录（默认）；subtitle=仅B站字幕，
+    # 拿不到直接报错；transcribe=跳过字幕，下载音频本地转写
+    "text_source": "auto",
     "model_id": os.getenv("MODEL_ID", "gpt-5.6-sol"),
     "base_url": os.getenv("LLM_BASE_URL", "https://api.avemujica.moe/v1"),
     "api_key": os.getenv("LLM_API_KEY", ""),
@@ -740,13 +743,18 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
             # 封面在后台线程取（requests 阻塞调用不能放进 UI 定时器）
             state.update(cover_src=_fetch_cover_base64(info.get("pic", "")))
 
-            # 第 1.5 步：优先尝试读取B站字幕（UP主/AI字幕），命中即跳过下载与转录
-            state.update(message="正在尝试读取B站字幕...")
-            sub_started = time.time()
-            subtitle_text = core.fetch_subtitle_text(bvid, p, progress)
-            # fetch_subtitle_text 内部吞掉所有异常，取消在这里补检一次
-            if state.cancel_event.is_set():
-                raise TaskCancelled()
+            # 第 1.5 步：按「文字稿来源」设置决定字幕/转录路线
+            # （auto=字幕优先回退转录；subtitle=仅字幕；transcribe=跳过字幕）
+            text_source = settings.get("text_source", "auto")
+            subtitle_text = None
+            sub_started = None
+            if text_source != "transcribe":
+                state.update(message="正在尝试读取B站字幕...")
+                sub_started = time.time()
+                subtitle_text = core.fetch_subtitle_text(bvid, p, progress)
+                # fetch_subtitle_text 内部吞掉所有异常，取消在这里补检一次
+                if state.cancel_event.is_set():
+                    raise TaskCancelled()
             if subtitle_text:
                 transcript = subtitle_text
                 core.save_transcription(bvid, state.title, subtitle_text, p)
@@ -754,6 +762,12 @@ def _run_pipeline(state: TaskState, url: str, settings: dict):
                     subtitle_hit=True, subtitle_time=time.time() - sub_started,
                     step=4, stream_text="",
                     message="已读取B站字幕，跳过下载与转录，正在调用 AI 模型…")
+            elif text_source == "subtitle":
+                state.update(
+                    phase="error",
+                    error="未获取到B站字幕（该视频无字幕，或AI字幕需在设置中扫码登录），"
+                          "可改为「自动」或「使用本地转录」后再试")
+                return
             else:
                 # 第 2 步：下载音频
                 state.update(step=2, message="正在下载音频...")
@@ -962,6 +976,16 @@ def main_page():
                        .props("dense outlined clearable"))
         thinking_switch = ui.switch("🧠 深度思考（更慢但更详细）",
                                     value=settings["thinking"])
+        # 文字稿来源：决定流水线取字幕还是本地转录（缓存命中不受影响）
+        ui.label("文字稿来源").classes("text-sm text-slate-600")
+        text_source_toggle = (ui.toggle(
+            {"subtitle": "使用B站字幕", "auto": "自动", "transcribe": "使用本地转录"},
+            value=settings.get("text_source", "auto"))
+            .props("dense no-caps")
+            .classes("w-full flex-wrap"))
+        ui.label("自动=优先B站字幕、拿不到回退本地转录；使用B站字幕=只用字幕，"
+                 "无字幕时报错；使用本地转录=跳过字幕。已生成过的视频直接复用缓存文字稿。"
+                 ).classes("text-xs text-slate-400")
         ui.label("模型列表按 API 地址/Key 查询；改了凭证保存后会自动刷新。"
                  "保存后对下一个任务生效。").classes("text-xs text-slate-400")
 
@@ -987,6 +1011,7 @@ def main_page():
             settings.update(
                 word_limit=word_limit,
                 thinking=bool(thinking_switch.value),
+                text_source=text_source_toggle.value or "auto",
                 model_id=(str(model_select.value or "").strip()
                           or _DEFAULT_SETTINGS["model_id"]),
                 base_url=base_url or _DEFAULT_SETTINGS["base_url"],
